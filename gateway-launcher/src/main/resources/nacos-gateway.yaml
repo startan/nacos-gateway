@@ -1,0 +1,46 @@
+# Nacos Gateway Configuration
+
+server:
+  port: 19848
+
+# Routes configuration
+routes:
+  - host: "localhost.dev"
+    path: "/**"
+    backend: local-nacos
+    # qpsLimit: 1000        # Optional: override global QPS limit
+    # maxConnections: 500   # Optional: override global max connections
+
+# Backends configuration
+backends:
+  - name: local-nacos
+    loadBalance: round-robin
+    endpoints:
+      - host: localhost
+        port: 9848
+        priority: 1
+
+# Rate limiting configuration
+rateLimit:
+  globalQpsLimit: 10000
+  globalMaxConnections: 5000
+  defaultQpsLimit: 1000
+  defaultMaxConnections: 500
+
+# Timeout configuration
+timeout:
+  connectTimeoutSeconds: 10
+  requestTimeoutSeconds: 30
+  idleTimeoutSeconds: 60
+
+# Logging configuration
+logging:
+  level: INFO
+  verbose: true
+  format: json           # text or json
+
+# Management endpoint configuration
+management:
+  health:
+    enabled: true
+    path: /health
