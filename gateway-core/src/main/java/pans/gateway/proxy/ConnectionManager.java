@@ -1,7 +1,6 @@
 package pans.gateway.proxy;
 
-import io.vertx.core.http.HttpServerRequest;
-import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.http.HttpConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pans.gateway.route.Route;
@@ -11,38 +10,44 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Connection manager for tracking active connections
+ * Connection manager for tracking active ProxyConnections
  */
 public class ConnectionManager {
 
     private static final Logger log = LoggerFactory.getLogger(ConnectionManager.class);
 
-    private final Map<HttpServerRequest, ProxyConnection> connections = new ConcurrentHashMap<>();
+    private final Map<HttpConnection, ProxyConnection> connections = new ConcurrentHashMap<>();
 
-    public void addConnection(HttpServerRequest clientRequest, ProxyConnection proxyConnection) {
-        connections.put(clientRequest, proxyConnection);
+    /**
+     * Add proxy connection
+     */
+    public void addConnection(HttpConnection clientConnection, ProxyConnection proxyConnection) {
+        connections.put(clientConnection, proxyConnection);
         log.debug("Added connection: {} -> {}, total: {}",
-                clientRequest.remoteAddress(),
+                clientConnection,
                 proxyConnection.getEndpoint().getAddress(),
                 connections.size());
     }
 
-    public void removeConnection(HttpServerRequest clientRequest) {
-        ProxyConnection connection = connections.remove(clientRequest);
-        if (connection != null) {
-            log.debug("Removed connection: {}, duration: {}ms, total: {}",
-                    clientRequest.remoteAddress(),
-                    connection.getDuration(),
+    /**
+     * Remove connection and cleanup all resources via ProxyConnection.close()
+     */
+    public void removeConnection(HttpConnection connection) {
+        ProxyConnection proxyConnection = connections.remove(connection);
+        if (proxyConnection != null) {
+            proxyConnection.close();  // ProxyConnection handles all resource cleanup
+            log.debug("Connection {}: Removed proxy connection, duration: {}ms, total: {}",
+                    connection,
+                    proxyConnection.getDuration(),
                     connections.size());
         }
     }
 
-    public ProxyConnection getConnection(HttpServerRequest clientRequest) {
-        return connections.get(clientRequest);
-    }
-
-    public int getConnectionCount() {
-        return connections.size();
+    /**
+     * Get proxy connection for this HttpConnection
+     */
+    public ProxyConnection getConnection(HttpConnection connection) {
+        return connections.get(connection);
     }
 
     /**
@@ -52,24 +57,21 @@ public class ConnectionManager {
         log.info("Checking {} connections for route validity", connections.size());
 
         int disconnected = 0;
-        for (Map.Entry<HttpServerRequest, ProxyConnection> entry : connections.entrySet()) {
-            HttpServerRequest clientRequest = entry.getKey();
-            ProxyConnection connection = entry.getValue();
-            Route route = connection.getRoute();
+        for (Map.Entry<HttpConnection, ProxyConnection> entry : connections.entrySet()) {
+            HttpConnection connection = entry.getKey();
+            ProxyConnection proxyConnection = entry.getValue();
+            Route route = proxyConnection.getRoute();
 
             // Check if route still exists
-            boolean routeExists = newRouteMatcher.match(
-                    clientRequest.getHeader("Host"),
-                    clientRequest.path()
-            ).isPresent();
+            boolean routeExists = newRouteMatcher.match(route.getHostPattern(), route.getPathPattern()).isPresent();
 
             if (!routeExists) {
-                // Send 503 and close connection
-                HttpServerResponse response = clientRequest.response();
-                if (!response.ended()) {
-                    response.setStatusCode(503);
-                    response.setStatusMessage("Service Unavailable - Route configuration changed");
-                    response.end();
+                // Close the connection
+                try {
+                    connection.close();
+                    log.debug("Connection {}: Closed due to route configuration change", connection);
+                } catch (Exception e) {
+                    log.warn("Error closing connection: {}", e.getMessage());
                 }
                 disconnected++;
             }
@@ -85,17 +87,17 @@ public class ConnectionManager {
      */
     public void closeAll() {
         log.info("Closing all {} connections", connections.size());
-        for (Map.Entry<HttpServerRequest, ProxyConnection> entry : connections.entrySet()) {
-            HttpServerRequest request = entry.getKey();
-            HttpServerResponse response = request.response();
-            if (!response.ended()) {
-                try {
-                    response.reset();
-                } catch (Exception e) {
-                    log.warn("Error closing connection", e);
-                }
+        connections.keySet().forEach(connection -> {
+            try {
+                connection.close();
+            } catch (Exception e) {
+                log.warn("Error closing connection", e);
             }
-        }
+        });
         connections.clear();
+    }
+
+    public int getConnectionCount() {
+        return connections.size();
     }
 }

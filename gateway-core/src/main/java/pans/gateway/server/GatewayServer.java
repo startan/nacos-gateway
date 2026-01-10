@@ -2,6 +2,7 @@ package pans.gateway.server;
 
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.HttpConnection;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
@@ -44,7 +45,6 @@ public class GatewayServer {
 
     private HttpServer server;
     private HttpClient httpClient;
-    private HttpClient http2Client;
 
     // Core components
     private RouteMatcher routeMatcher;
@@ -71,9 +71,8 @@ public class GatewayServer {
         HttpServerOptions options = createServerOptions();
         server = vertx.createHttpServer(options);
 
-        // Create HTTP clients
+        // Create HTTP client (for HTTP/1 only, not used for HTTP/2)
         httpClient = vertx.createHttpClient();
-        http2Client = vertx.createHttpClient(createHttp2ClientOptions());
 
         // Request handler
         server.requestHandler(this::handleRequest);
@@ -201,6 +200,7 @@ public class GatewayServer {
     }
 
     private void handleRequest(HttpServerRequest request) {
+        HttpConnection connection = request.connection();
         HostAndPort hostAndPort = request.authority();
         String path = request.path();
 
@@ -221,76 +221,91 @@ public class GatewayServer {
         }
 
         Route route = routeOpt.get();
-
-        // Check rate limit
         String routeId = route.getId();
+
+        // Check rate limit (request-level)
         if (!rateLimitManager.tryAcquire(routeId)) {
             log.warn("Rate limit exceeded for route: {}", routeId);
             request.response().setStatusCode(429).end("Too Many Requests");
             return;
         }
 
-        // Select backend
-        Backend backend = backends.get(route.getBackendName());
-        if (backend == null) {
-            log.error("Backend not found: {}", route.getBackendName());
-            request.response().setStatusCode(503).end("Service Unavailable - Backend not found");
-            rateLimitManager.release(routeId);
-            return;
+        // Connection-level: Get or create ProxyConnection
+        ProxyConnection proxyConnection = connectionManager.getConnection(connection);
+
+        if (proxyConnection == null) {
+            // First request on this connection - perform connection-level initialization
+
+            // 1. Select backend and endpoint (load balancing)
+            Backend backend = backends.get(route.getBackendName());
+            if (backend == null) {
+                log.error("Backend not found: {}", route.getBackendName());
+                request.response().setStatusCode(503).end("Service Unavailable - Backend not found");
+                rateLimitManager.release(routeId);
+                return;
+            }
+
+            Endpoint endpoint = endpointSelector.select(backend);
+            if (endpoint == null) {
+                log.error("No healthy endpoint for backend: {}", backend.getName());
+                request.response().setStatusCode(503).end("Service Unavailable - No healthy endpoints");
+                rateLimitManager.release(routeId);
+                return;
+            }
+
+            // 2. Create dedicated HttpClient
+            HttpClient clientHttpClient = vertx.createHttpClient(createHttp2ClientOptions());
+
+            // 3. Notify load balancer (connection level)
+            backend.getLoadBalancer().onConnectionOpen(endpoint);
+
+            // 4. Create ProxyConnection with all resources
+            proxyConnection = new ProxyConnection(connection, route, endpoint, backend, clientHttpClient);
+            connectionManager.addConnection(connection, proxyConnection);
+
+            log.debug("Connection {}: Created ProxyConnection with backend {}",
+                     connection, endpoint.getAddress());
+
+            // 5. Register cleanup handlers (connection level)
+            connection.closeHandler(v -> {
+                log.debug("Connection {}: Normally closed", connection);
+                connectionManager.removeConnection(connection);
+            });
+
+            connection.exceptionHandler(t -> {
+                log.debug("Connection {}: Abnormally closed - {}", connection, t.getMessage());
+                connectionManager.removeConnection(connection);
+            });
         }
 
-        // Select endpoint
-        Endpoint endpoint = endpointSelector.select(backend);
-        if (endpoint == null) {
-            log.error("No healthy endpoint for backend: {}", backend.getName());
-            request.response().setStatusCode(503).end("Service Unavailable - No healthy endpoints");
-            rateLimitManager.release(routeId);
-            return;
-        }
-
-        // Create proxy connection
-        ProxyConnection proxyConnection = new ProxyConnection(request, route, endpoint);
-        connectionManager.addConnection(request, proxyConnection);
-
-        // Notify load balancer
-        backend.getLoadBalancer().onConnectionOpen(endpoint);
-
-        // Handle proxy
+        // Use the connection's HttpClient and Endpoint for this request
         try {
             if (GrpcProxyHandler.isGrpcRequest(request)) {
-                // gRPC request
                 GrpcProxyHandler grpcHandler = new GrpcProxyHandler(
-                        http2Client,
-                        endpoint,
+                        proxyConnection.getHttpClient(),
+                        proxyConnection.getEndpoint(),
                         config.getTimeout()
                 );
                 grpcHandler.handle(request);
             } else {
-                // HTTP/1 or HTTP/2 request
                 HttpProxyHandler httpHandler = new HttpProxyHandler(
-                        http2Client,
-                        endpoint,
+                        proxyConnection.getHttpClient(),
+                        proxyConnection.getEndpoint(),
                         config.getTimeout()
                 );
                 httpHandler.handle(request);
             }
-
-            // Setup cleanup
-            request.response().endHandler(v -> {
-                connectionManager.removeConnection(request);
-                backend.getLoadBalancer().onConnectionClose(endpoint);
-                rateLimitManager.release(routeId);
-            });
-
         } catch (Exception e) {
             log.error("Error proxying request: {}", e.getMessage(), e);
             if (!request.response().ended()) {
                 request.response().setStatusCode(500).end("Internal Server Error");
             }
-            connectionManager.removeConnection(request);
-            backend.getLoadBalancer().onConnectionClose(endpoint);
             rateLimitManager.release(routeId);
         }
+    }
+
+    public ConnectionManager getConnectionManager() {
+        return connectionManager;
     }
 
     public RouteMatcher getRouteMatcher() {
@@ -299,10 +314,6 @@ public class GatewayServer {
 
     public Map<String, Backend> getBackends() {
         return backends;
-    }
-
-    public ConnectionManager getConnectionManager() {
-        return connectionManager;
     }
 
     public HealthCheckManager getHealthCheckManager() {
