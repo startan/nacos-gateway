@@ -714,21 +714,110 @@ GrpcProxyHandler
     └── handle(request)
 
 ConnectionManager
-    ├── Map<HttpServerRequest, ProxyConnection> connections
-    ├── addConnection(request, connection)
-    ├── removeConnection(request)
+    ├── Map<HttpConnection, ProxyConnection> connections
+    ├── addConnection(connection, proxyConnection)
+    ├── removeConnection(connection)
+    ├── getConnection(connection): ProxyConnection
     ├── disconnectInvalidConnections(routeMatcher)
     └── closeAll()
 
-ProxyConnection
-    ├── HttpServerRequest clientRequest
-    ├── Route route
-    ├── Endpoint endpoint
-    ├── long createTime
-    └── getDuration(): long
+ProxyConnection (连接级资源容器)
+    ├── HttpConnection clientConnection    # 客户端连接
+    ├── Route route                       # 路由信息
+    ├── Endpoint endpoint                 # 选定的后端端点
+    ├── Backend backend                   # 后端服务
+    ├── HttpClient httpClient             # 专属 HttpClient
+    ├── long createTime                   # 创建时间
+    ├── close()                           # 统一释放所有资源
+    └── getDuration(): long               # 连接持续时间
 ```
 
-#### 4.6.2 代理流程
+#### 4.6.2 连接管理架构
+
+**核心设计理念**
+- **连接级别资源管理**：每个客户端 TCP 连接对应一个专属的 ProxyConnection
+- **资源生命周期绑定**：HttpClient、Endpoint、Backend 与 ProxyConnection 生命周期一致
+- **自动清理机制**：客户端断开时自动释放所有后端资源，防止连接泄漏
+
+**架构图**
+```
+客户端 TCP 连接 (1:1) HttpConnection (1:1) ProxyConnection
+                                                   ↓
+                                            ┌──────────────┐
+                                            │ HttpClient   │ 专属后端连接
+                                            │ Endpoint     │ 选定的后端
+                                            │ Backend      │ 后端服务
+                                            └──────────────┘
+
+连接断开时：
+  connection.closeHandler() → ConnectionManager.removeConnection()
+    → ProxyConnection.close()
+      → httpClient.close()           # 关闭后端连接
+      → backend.loadBalancer.onConnectionClose()  # 通知负载均衡器
+```
+
+**关键特性**
+
+1. **连接级负载均衡**
+   - 每个客户端连接首次请求时选择后端端点
+   - 同一连接上的所有后续请求复用同一后端
+   - 支持连接数统计（least-connection 策略）
+
+2. **自动资源清理**
+   ```java
+   // 正常关闭
+   connection.closeHandler(v -> {
+       connectionManager.removeConnection(connection);
+   });
+
+   // 异常关闭（网络中断、进程被杀）
+   connection.exceptionHandler(t -> {
+       connectionManager.removeConnection(connection);
+   });
+   ```
+
+3. **配置热更新支持**
+   - 配置变更时检查现有连接是否符合新路由
+   - 自动断开不符合新路由的连接
+   - 保持符合新路由的连接继续使用
+
+#### 4.6.3 代理流程
+
+**连接级初始化（首次请求）**
+```
+1. 获取 HttpConnection
+   connection = request.connection()
+
+2. 检查是否已有 ProxyConnection
+   proxyConnection = connectionManager.getConnection(connection)
+
+3. 如果为 null（首次请求）：
+   a. 选择后端端点（负载均衡）
+      backend = backends.get(route.backendName)
+      endpoint = endpointSelector.select(backend)
+
+   b. 创建专属 HttpClient
+      httpClient = vertx.createHttpClient(createHttp2ClientOptions())
+
+   c. 通知负载均衡器（连接级）
+      backend.loadBalancer.onConnectionOpen(endpoint)
+
+   d. 创建 ProxyConnection
+      proxyConnection = new ProxyConnection(
+          connection, route, endpoint, backend, httpClient
+      )
+
+   e. 注册到 ConnectionManager
+      connectionManager.addConnection(connection, proxyConnection)
+
+   f. 注册清理处理器
+      connection.closeHandler(...)
+      connection.exceptionHandler(...)
+
+4. 如果不为 null（后续请求）：
+   - 直接复用现有 ProxyConnection
+   - 无需重复负载均衡、创建 HttpClient 等
+```
 
 **HTTP/1 代理**
 ```

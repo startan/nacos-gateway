@@ -201,35 +201,56 @@ RouteMatcher → RateLimitManager → LoadBalancer → ProxyHandler
    IF route == null THEN
      RETURN 404 Not Found
 
-3. 限流检查
+3. 限流检查（请求级别）
    IF !RateLimitManager.tryAcquire(route.id) THEN
      RETURN 429 Too Many Requests
 
-4. 选择端点
-   backend = Backends[route.backendName]
-   endpoint = EndpointSelector.select(backend)
-   IF endpoint == null THEN
-     RETURN 503 Service Unavailable
+4. 连接级别初始化
+   connection = request.connection()
+   proxyConnection = ConnectionManager.getConnection(connection)
 
-5. 创建代理连接
-   connection = ProxyConnection(request, route, endpoint)
-   ConnectionManager.add(connection)
+   IF proxyConnection == null THEN
+     # 首次请求：创建连接级资源
+     a. 选择后端端点（负载均衡）
+        backend = Backends[route.backendName]
+        endpoint = EndpointSelector.select(backend)
 
-6. 选择代理处理器
-   IF GrpcProxyHandler.isGrpcRequest(request) THEN
-     handler = GrpcProxyHandler
+     b. 创建专属 HttpClient
+        httpClient = vertx.createHttpClient(createHttp2ClientOptions())
+
+     c. 通知负载均衡器（连接级）
+        backend.loadBalancer.onConnectionOpen(endpoint)
+
+     d. 创建 ProxyConnection
+        proxyConnection = new ProxyConnection(
+            connection, route, endpoint, backend, httpClient
+        )
+
+     e. 注册到 ConnectionManager
+        ConnectionManager.addConnection(connection, proxyConnection)
+
+     f. 注册清理处理器
+        connection.closeHandler(v -> ConnectionManager.removeConnection(connection))
+        connection.exceptionHandler(t -> ConnectionManager.removeConnection(connection))
    ELSE
-     handler = HttpProxyHandler
+     # 后续请求：复用现有资源
+     proxyConnection 已包含 httpClient、endpoint、backend
 
-7. 执行代理
+5. 选择代理处理器
+   IF GrpcProxyHandler.isGrpcRequest(request) THEN
+     handler = GrpcProxyHandler(proxyConnection.getHttpClient(), ...)
+   ELSE
+     handler = HttpProxyHandler(proxyConnection.getHttpClient(), ...)
+
+6. 执行代理
    handler.handle(request)
 
-8. 清理资源
-   request.response().endHandler(() -> {
-     ConnectionManager.remove(connection)
-     RateLimitManager.release(route.id)
-     LoadBalancer.onConnectionClose(endpoint)
-   })
+7. 连接清理（自动）
+   当客户端连接关闭时（正常或异常）：
+     ConnectionManager.removeConnection(connection)
+       → ProxyConnection.close()
+         → httpClient.close()              # 关闭后端连接
+         → backend.loadBalancer.onConnectionClose()  # 通知负载均衡器
 ```
 
 ### 路由匹配算法
