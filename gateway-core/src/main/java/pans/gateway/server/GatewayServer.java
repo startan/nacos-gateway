@@ -2,6 +2,7 @@ package pans.gateway.server;
 
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpConnection;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
@@ -138,6 +139,21 @@ public class GatewayServer {
         return options;
     }
 
+    private io.vertx.core.http.HttpClientOptions createHttp1ClientOptions() {
+        io.vertx.core.http.HttpClientOptions options = new io.vertx.core.http.HttpClientOptions();
+        options.setProtocolVersion(HttpVersion.HTTP_1_1)
+                .setSsl(false);
+
+        TimeoutConfig timeout = config.getTimeout();
+        if (timeout != null) {
+            options.setConnectTimeout(timeout.getConnectTimeoutSeconds() * 1000);
+            options.setIdleTimeout(timeout.getIdleTimeoutSeconds());
+        }
+
+        return options;
+    }
+
+
     private io.vertx.core.http.HttpClientOptions createHttp2ClientOptions() {
         io.vertx.core.http.HttpClientOptions options = new io.vertx.core.http.HttpClientOptions();
         options.setProtocolVersion(HttpVersion.HTTP_2)
@@ -211,8 +227,12 @@ public class GatewayServer {
                 return;
             }
 
+            HttpClientOptions httpClientOptions = switch (portType) {
+                case API_V1, API_CONSOLE -> createHttp1ClientOptions();
+                case API_V2 -> createHttp2ClientOptions();
+            };
             // 2. Create dedicated HttpClient
-            HttpClient clientHttpClient = vertx.createHttpClient(createHttp2ClientOptions());
+            HttpClient clientHttpClient = vertx.createHttpClient(httpClientOptions);
 
             // 3. Notify load balancer (connection level)
             backend.getLoadBalancer().onConnectionOpen(endpoint);
