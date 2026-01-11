@@ -124,14 +124,14 @@ public class GatewayServerManager {
     private void initializeSharedComponents() {
         log.info("Initializing shared gateway components...");
 
+        // Initialize rate limit manager first (needed by ConnectionManager)
+        rateLimitManager = new RateLimitManager(config);
+
         // Initialize connection manager (shared across all servers)
-        connectionManager = new ConnectionManager();
+        connectionManager = new ConnectionManager(rateLimitManager);
 
         // Initialize health check manager (shared across all servers)
         healthCheckManager = new HealthCheckManager(vertx);
-
-        // Initialize rate limit manager (shared across all servers)
-        rateLimitManager = new RateLimitManager(config);
 
         // Initialize routes and backends
         initializeRoutesAndBackends();

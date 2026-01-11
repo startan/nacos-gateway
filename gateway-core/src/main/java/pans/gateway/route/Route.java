@@ -9,24 +9,18 @@ import java.util.UUID;
  */
 public class Route {
 
-    private final String id;
     private final String hostPattern;
     private final String pathPattern;
     private final String backendName;
-    private final Integer qpsLimit;
-    private final Integer maxConnections;
 
     public Route(RouteConfig config) {
-        this.id = UUID.randomUUID().toString();
         this.hostPattern = config.getHost();
         this.pathPattern = config.getPath();
         this.backendName = config.getBackend();
-        this.qpsLimit = config.getQpsLimit();
-        this.maxConnections = config.getMaxConnections();
     }
 
     public String getId() {
-        return id;
+        return hostPattern + '#' + pathPattern;
     }
 
     public String getHostPattern() {
@@ -41,23 +35,12 @@ public class Route {
         return backendName;
     }
 
-    public Integer getQpsLimit() {
-        return qpsLimit;
-    }
-
-    public Integer getMaxConnections() {
-        return maxConnections;
-    }
-
     @Override
     public String toString() {
         return "Route{" +
-                "id='" + id + '\'' +
-                ", hostPattern='" + hostPattern + '\'' +
+                "hostPattern='" + hostPattern + '\'' +
                 ", pathPattern='" + pathPattern + '\'' +
                 ", backendName='" + backendName + '\'' +
-                ", qpsLimit=" + qpsLimit +
-                ", maxConnections=" + maxConnections +
                 '}';
     }
 }

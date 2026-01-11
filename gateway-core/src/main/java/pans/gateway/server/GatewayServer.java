@@ -23,6 +23,7 @@ import pans.gateway.proxy.ConnectionManager;
 import pans.gateway.proxy.GrpcProxyHandler;
 import pans.gateway.proxy.HttpProxyHandler;
 import pans.gateway.proxy.ProxyConnection;
+import pans.gateway.ratelimit.LimitExceededException;
 import pans.gateway.ratelimit.RateLimitManager;
 import pans.gateway.route.Route;
 import pans.gateway.route.RouteMatcher;
@@ -194,12 +195,11 @@ public class GatewayServer {
         }
 
         Route route = routeOpt.get();
-        String routeId = route.getId();
         String backendName = route.getBackendName();
 
-        // Check rate limit (three-tier: global, backend, client)
-        if (!rateLimitManager.tryAcquire(routeId, backendName, clientIp)) {
-            log.warn("Rate limit exceeded for route: {}, client: {}", routeId, clientIp);
+        // Check rate limit (QPS only, no connection check)
+        if (!rateLimitManager.tryAcquire(backendName, clientIp)) {
+            log.warn("Rate limit exceeded for client: {}", clientIp);
             request.response().setStatusCode(429).end("Too Many Requests");
             return;
         }
@@ -215,7 +215,6 @@ public class GatewayServer {
             if (backend == null) {
                 log.error("Backend not found: {}", backendName);
                 request.response().setStatusCode(503).end("Service Unavailable - Backend not found");
-                rateLimitManager.release(routeId, backendName, clientIp);
                 return;
             }
 
@@ -223,7 +222,6 @@ public class GatewayServer {
             if (endpoint == null) {
                 log.error("No healthy endpoint for backend: {}", backend.getName());
                 request.response().setStatusCode(503).end("Service Unavailable - No healthy endpoints");
-                rateLimitManager.release(routeId, backendName, clientIp);
                 return;
             }
 
@@ -238,11 +236,18 @@ public class GatewayServer {
             backend.getLoadBalancer().onConnectionOpen(endpoint);
 
             // 4. Create ProxyConnection with all resources including portType
-            proxyConnection = new ProxyConnection(connection, route, endpoint, backend, clientHttpClient, portType);
-            connectionManager.addConnection(connection, proxyConnection);
+            proxyConnection = new ProxyConnection(connection, route, endpoint, backend, clientHttpClient, portType, clientIp);
 
-            log.debug("Connection {}: Created ProxyConnection with {} for {} port",
-                     connection, endpoint.getAddress(), portType.getConfigName());
+            // 5. Add connection (ConnectionManager will handle close/exception handlers)
+            try {
+                connectionManager.addConnection(proxyConnection);
+                log.debug("Connection {}: Created ProxyConnection with {} for {} port",
+                        connection, endpoint.getAddress(), portType.getConfigName());
+            } catch (LimitExceededException e) {
+                log.warn("Connection limit exceeded for client: {}", proxyConnection.getClientIp());
+                request.response().setStatusCode(429).end("Too Many Connections");
+                return;
+            }
         }
 
         // Use the connection's HttpClient and get the correct port for this portType
@@ -276,7 +281,6 @@ public class GatewayServer {
             if (!request.response().ended()) {
                 request.response().setStatusCode(500).end("Internal Server Error");
             }
-            rateLimitManager.release(routeId, backendName, clientIp);
         }
     }
 

@@ -28,17 +28,19 @@ public class BackendRateLimiter {
     }
 
     /**
-     * Try to acquire permits for a request
-     * @return true if permits are acquired, false otherwise
+     * Try to acquire permits for a request (QPS only, no connection check)
+     * @return true if QPS permit is acquired, false otherwise
      */
-    public boolean tryAcquire() {
-        if (!qpsLimiter.tryAcquire()) {
-            return false;
-        }
-        if (!connectionLimiter.tryAcquire()) {
-            return false;
-        }
-        return true;
+    public boolean tryAcquireQps() {
+        return qpsLimiter.tryAcquire();
+    }
+
+    /**
+     * Try to acquire connection permit (called when creating a new connection)
+     * @return true if connection permit is acquired, false otherwise
+     */
+    public boolean tryAcquireConnection() {
+        return connectionLimiter.tryAcquire();
     }
 
     /**

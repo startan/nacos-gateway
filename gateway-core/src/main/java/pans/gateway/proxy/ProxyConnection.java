@@ -19,6 +19,7 @@ public class ProxyConnection {
     private final Backend backend;
     private final HttpClient httpClient;
     private final PortType portType;
+    private final String clientIp;
     private final long createTime;
 
     /**
@@ -26,13 +27,14 @@ public class ProxyConnection {
      * Used when creating a proxy connection for a specific port type
      */
     public ProxyConnection(HttpConnection clientConnection, Route route, Endpoint endpoint,
-                          Backend backend, HttpClient httpClient, PortType portType) {
+                          Backend backend, HttpClient httpClient, PortType portType, String clientIp) {
         this.clientConnection = clientConnection;
         this.route = route;
         this.endpoint = endpoint;
         this.backend = backend;
         this.httpClient = httpClient;
         this.portType = portType;
+        this.clientIp = clientIp;
         this.createTime = System.currentTimeMillis();
     }
 
@@ -58,6 +60,10 @@ public class ProxyConnection {
 
     public PortType getPortType() {
         return portType;
+    }
+
+    public String getClientIp() {
+        return clientIp;
     }
 
     /**

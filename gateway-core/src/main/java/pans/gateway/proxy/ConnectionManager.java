@@ -3,6 +3,8 @@ package pans.gateway.proxy;
 import io.vertx.core.http.HttpConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import pans.gateway.ratelimit.LimitExceededException;
+import pans.gateway.ratelimit.RateLimitManager;
 import pans.gateway.route.Route;
 import pans.gateway.route.RouteMatcher;
 
@@ -17,24 +19,37 @@ public class ConnectionManager {
     private static final Logger log = LoggerFactory.getLogger(ConnectionManager.class);
 
     private final Map<HttpConnection, ProxyConnection> connections = new ConcurrentHashMap<>();
+    private final RateLimitManager rateLimitManager;
+
+    /**
+     * Constructor with RateLimitManager
+     * @param rateLimitManager rate limit manager for releasing connection permits
+     */
+    public ConnectionManager(RateLimitManager rateLimitManager) {
+        this.rateLimitManager = rateLimitManager;
+    }
 
     /**
      * Add proxy connection
      */
-    public void addConnection(HttpConnection clientConnection, ProxyConnection proxyConnection) {
-        connections.put(clientConnection, proxyConnection);
+    public void addConnection(ProxyConnection proxyConnection) throws LimitExceededException {
+        // Check connection limit (should be checked once per TCP connection)
+        if (!rateLimitManager.tryAcquireConnection(proxyConnection.getBackend().getName(), proxyConnection.getClientIp())) {
+            throw new LimitExceededException("Too Many Connections");
+        }
+
+        HttpConnection clientConnection = proxyConnection.getClientConnection();
+        connections.put(proxyConnection.getClientConnection(), proxyConnection);
         // Register cleanup handlers (connection level)
         HttpConnection connection = proxyConnection.getClientConnection();
         connection.closeHandler(v -> {
             log.debug("Connection {}: Normally closed", connection);
             this.removeConnection(connection);
-            connection.close();
         });
 
         connection.exceptionHandler(t -> {
             log.debug("Connection {}: Abnormally closed - {}", connection, t.getMessage());
             this.removeConnection(connection);
-            connection.close();
         });
         log.debug("Added connection: {} -> {}, total: {}",
                 clientConnection,
@@ -48,7 +63,15 @@ public class ConnectionManager {
     public void removeConnection(HttpConnection connection) {
         ProxyConnection proxyConnection = connections.remove(connection);
         if (proxyConnection != null) {
-            proxyConnection.close();  // ProxyConnection handles all resource cleanup
+            // Release connection permit from rate limiter
+            rateLimitManager.releaseConnection(
+                proxyConnection.getBackend().getName(),
+                proxyConnection.getClientIp()
+            );
+
+            // Close all resources (HttpClient, notify load balancer, etc.)
+            proxyConnection.close();
+
             log.debug("Connection {}: Removed proxy connection, duration: {}ms, total: {}",
                     connection,
                     proxyConnection.getDuration(),

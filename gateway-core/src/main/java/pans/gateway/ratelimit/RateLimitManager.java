@@ -56,38 +56,65 @@ public class RateLimitManager {
     }
 
     /**
-     * Try to acquire permits for a request (three-tier check)
-     * @param routeId route identifier
+     * Try to acquire permits for a request (QPS only, no connection check)
+     * Connection limit should be checked separately when creating a new ProxyConnection
      * @param backendName backend service name
      * @param clientIp client IP address
-     * @return true if all tiers permit, false otherwise
+     * @return true if QPS permits are acquired, false otherwise
      */
-    public boolean tryAcquire(String routeId, String backendName, String clientIp) {
-        // 1. Check global limits
+    public boolean tryAcquire(String backendName, String clientIp) {
+        // 1. Check global QPS limit
         if (!globalQpsLimiter.tryAcquire()) {
             log.debug("Global QPS limit exceeded");
             return false;
         }
 
+        // 2. Check backend QPS limits (if configured)
+        BackendRateLimiter backendLimiter = backendLimiters.get(backendName);
+        if (backendLimiter != null) {
+            if (!backendLimiter.tryAcquireQps()) {
+                log.debug("Backend-level QPS limit exceeded for: {}", backendName);
+                return false;
+            }
+        }
+
+        // 3. Check client QPS limits
+        ClientRateLimiter clientLimiter = getOrCreateClientLimiter(clientIp, backendName);
+        if (!clientLimiter.tryAcquireQps()) {
+            log.debug("Client-level QPS limit exceeded for: {}", clientIp);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Try to acquire connection permits (called when creating a new ProxyConnection)
+     * @param backendName backend service name
+     * @param clientIp client IP address
+     * @return true if connection permits are acquired, false otherwise
+     */
+    public boolean tryAcquireConnection(String backendName, String clientIp) {
+        // 1. Check global connection limit
         if (!globalConnectionLimiter.tryAcquire()) {
             log.debug("Global connection limit exceeded");
             return false;
         }
 
-        // 2. Check backend limits (if configured)
+        // 2. Check backend connection limits (if configured)
         BackendRateLimiter backendLimiter = backendLimiters.get(backendName);
         if (backendLimiter != null) {
-            if (!backendLimiter.tryAcquire()) {
-                log.debug("Backend-level limit exceeded for: {}", backendName);
+            if (!backendLimiter.tryAcquireConnection()) {
+                log.debug("Backend-level connection limit exceeded for: {}", backendName);
                 globalConnectionLimiter.release();
                 return false;
             }
         }
 
-        // 3. Check client limits
+        // 3. Check client connection limits
         ClientRateLimiter clientLimiter = getOrCreateClientLimiter(clientIp, backendName);
-        if (!clientLimiter.tryAcquire()) {
-            log.debug("Client-level limit exceeded for: {}", clientIp);
+        if (!clientLimiter.tryAcquireConnection()) {
+            log.debug("Client-level connection limit exceeded for: {}", clientIp);
             globalConnectionLimiter.release();
             if (backendLimiter != null) {
                 backendLimiter.release();
@@ -99,12 +126,11 @@ public class RateLimitManager {
     }
 
     /**
-     * Release permits for a request
-     * @param routeId route identifier
+     * Release connection permits (called when ProxyConnection is closed)
      * @param backendName backend service name
      * @param clientIp client IP address
      */
-    public void release(String routeId, String backendName, String clientIp) {
+    public void releaseConnection(String backendName, String clientIp) {
         // Release global connection permit
         globalConnectionLimiter.release();
 
@@ -119,21 +145,6 @@ public class RateLimitManager {
         if (clientLimiter != null) {
             clientLimiter.release();
         }
-    }
-
-    /**
-     * Legacy method for backward compatibility
-     * Uses global limits only
-     */
-    public boolean tryAcquire(String routeId) {
-        return tryAcquire(routeId, null, null);
-    }
-
-    /**
-     * Legacy method for backward compatibility
-     */
-    public void release(String routeId) {
-        release(routeId, null, null);
     }
 
     /**
@@ -176,63 +187,5 @@ public class RateLimitManager {
             log.info("Updated backend rate limiter for {}: QPS={}, Connections={}",
                     backendName, rateLimit.getMaxQps(), rateLimit.getMaxConnections());
         }
-    }
-
-    /**
-     * Remove backend-level rate limiter
-     */
-    public void removeBackendLimiter(String backendName) {
-        backendLimiters.remove(backendName);
-    }
-
-    /**
-     * Add or update route-level rate limiter (legacy compatibility)
-     */
-    public void updateRouteLimiter(String routeId, pans.gateway.config.RouteConfig routeConfig, GatewayConfig globalConfig) {
-        // Route-level limiting is deprecated in favor of backend-level
-        // This method is kept for backward compatibility
-        log.debug("Route-level rate limiting is deprecated, use backend-level instead");
-    }
-
-    /**
-     * Remove route-level rate limiter (legacy compatibility)
-     */
-    public void removeRouteLimiter(String routeId) {
-        // No-op as route-level limiters are no longer used
-    }
-
-    /**
-     * Get current global connection count
-     */
-    public int getCurrentGlobalConnections() {
-        return globalConnectionLimiter.getCurrentConnections();
-    }
-
-    /**
-     * Get max global connections
-     */
-    public int getMaxGlobalConnections() {
-        return globalConnectionLimiter.getMaxConnections();
-    }
-
-    /**
-     * Get server-level rate limit configuration
-     */
-    public ServerConfig.ServerRateLimitConfig getServerRateLimitConfig() {
-        return serverRateLimitConfig;
-    }
-
-    /**
-     * Get all backend rate limiters
-     */
-    public Map<String, BackendRateLimiter> getBackendLimiters() {
-        return new ConcurrentHashMap<>(backendLimiters);
-    }
-
-    /**
-     * Get all client rate limiters
-     */
-    public Map<String, ClientRateLimiter> getClientLimiters() {
-        return new ConcurrentHashMap<>(clientLimiters);
     }
 }
