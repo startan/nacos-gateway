@@ -4,17 +4,15 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Endpoint configuration
+ * Port is now configured at BackendConfig level
  */
 public class EndpointConfig {
 
     @JsonProperty("host")
     private String host;
 
-    @JsonProperty("port")
-    private int port;
-
     @JsonProperty("priority")
-    private int priority = 1;
+    private int priority = 10;
 
     public String getHost() {
         return host;
@@ -22,14 +20,6 @@ public class EndpointConfig {
 
     public void setHost(String host) {
         this.host = host;
-    }
-
-    public int getPort() {
-        return port;
-    }
-
-    public void setPort(int port) {
-        this.port = port;
     }
 
     public int getPriority() {
@@ -44,7 +34,6 @@ public class EndpointConfig {
     public String toString() {
         return "EndpointConfig{" +
                 "host='" + host + '\'' +
-                ", port=" + port +
                 ", priority=" + priority +
                 '}';
     }

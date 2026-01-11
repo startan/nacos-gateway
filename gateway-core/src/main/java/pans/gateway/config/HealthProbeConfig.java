@@ -7,6 +7,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 public class HealthProbeConfig {
 
+    @JsonProperty("enabled")
+    private boolean enabled = true;
+
+    @JsonProperty("type")
+    private String type = "http";  // "http" or "tcp"
+
     @JsonProperty("path")
     private String path = "/health";
 
@@ -21,6 +27,22 @@ public class HealthProbeConfig {
 
     @JsonProperty("failureThreshold")
     private int failureThreshold = 3;
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
 
     public String getPath() {
         return path;
@@ -65,7 +87,9 @@ public class HealthProbeConfig {
     @Override
     public String toString() {
         return "HealthProbeConfig{" +
-                "path='" + path + '\'' +
+                "enabled=" + enabled +
+                ", type='" + type + '\'' +
+                ", path='" + path + '\'' +
                 ", periodSeconds=" + periodSeconds +
                 ", timeoutSeconds=" + timeoutSeconds +
                 ", successThreshold=" + successThreshold +

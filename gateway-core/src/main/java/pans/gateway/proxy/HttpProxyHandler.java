@@ -8,7 +8,6 @@ import io.vertx.core.http.HttpServerResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pans.gateway.config.TimeoutConfig;
-import pans.gateway.model.Endpoint;
 
 /**
  * HTTP/1 and HTTP/2 proxy handler
@@ -18,12 +17,17 @@ public class HttpProxyHandler implements ProxyHandler {
     private static final Logger log = LoggerFactory.getLogger(HttpProxyHandler.class);
 
     private final HttpClient httpClient;
-    private final Endpoint endpoint;
+    private final String host;
+    private final int port;
     private final TimeoutConfig timeoutConfig;
 
-    public HttpProxyHandler(HttpClient httpClient, Endpoint endpoint, TimeoutConfig timeoutConfig) {
+    /**
+     * Constructor with host and port
+     */
+    public HttpProxyHandler(HttpClient httpClient, String host, int port, TimeoutConfig timeoutConfig) {
         this.httpClient = httpClient;
-        this.endpoint = endpoint;
+        this.host = host;
+        this.port = port;
         this.timeoutConfig = timeoutConfig;
     }
 
@@ -32,16 +36,17 @@ public class HttpProxyHandler implements ProxyHandler {
         HttpServerResponse response = request.response();
         request.pause();
 
+        String address = host + ":" + port;
         log.debug("Proxying {} {} to endpoint {}",
                 request.method(),
                 request.uri(),
-                endpoint.getAddress());
+                address);
 
         // Create proxy request
         httpClient.request(
                 request.method(),
-                endpoint.getPort(),
-                endpoint.getHost(),
+                port,
+                host,
                 request.uri())
             .onSuccess(proxyRequest -> {
                 // Copy headers (skip hop-by-hop headers)
@@ -59,14 +64,14 @@ public class HttpProxyHandler implements ProxyHandler {
 
                 request.endHandler(v -> {
                     proxyRequest.end();
-                    log.debug("Request proxied to {}", endpoint.getAddress());
+                    log.debug("Request proxied to {}", address);
                 });
 
                 // Handle proxy response
                 proxyRequest.response()
-                    .onSuccess(proxyResponse -> handleProxyResponse(request, proxyResponse, response))
+                    .onSuccess(proxyResponse -> handleProxyResponse(request, proxyResponse, response, address))
                     .onFailure(t -> {
-                        log.error("Response from backend {} failed: {}", endpoint.getAddress(), t.getMessage());
+                        log.error("Response from backend {} failed: {}", address, t.getMessage());
                         if (!response.ended()) {
                             response.setStatusCode(502);
                             response.setStatusMessage("Bad Gateway");
@@ -77,7 +82,7 @@ public class HttpProxyHandler implements ProxyHandler {
                 request.resume();
             })
             .onFailure(t -> {
-                log.error("Request to backend {} failed: {}", endpoint.getAddress(), t.getMessage());
+                log.error("Request to backend {} failed: {}", address, t.getMessage());
                 if (!response.ended()) {
                     response.setStatusCode(502);
                     response.setStatusMessage("Bad Gateway");
@@ -89,7 +94,8 @@ public class HttpProxyHandler implements ProxyHandler {
 
     private void handleProxyResponse(HttpServerRequest clientRequest,
                                      HttpClientResponse proxyResponse,
-                                     HttpServerResponse clientResponse) {
+                                     HttpServerResponse clientResponse,
+                                     String address) {
         // Set status code
         clientResponse.setStatusCode(proxyResponse.statusCode());
         clientResponse.setStatusMessage(proxyResponse.statusMessage());
@@ -106,13 +112,11 @@ public class HttpProxyHandler implements ProxyHandler {
 
         proxyResponse.endHandler(v -> {
             clientResponse.end();
-            log.debug("Response from {}: status {}",
-                    endpoint.getAddress(),
-                    proxyResponse.statusCode());
+            log.debug("Response from {}: status {}", address, proxyResponse.statusCode());
         });
 
         proxyResponse.exceptionHandler(t -> {
-            log.error("Error reading response from {}: {}", endpoint.getAddress(), t.getMessage());
+            log.error("Error reading response from {}: {}", address, t.getMessage());
             if (!clientResponse.ended()) {
                 clientResponse.reset();
             }

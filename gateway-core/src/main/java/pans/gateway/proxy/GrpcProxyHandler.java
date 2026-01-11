@@ -8,7 +8,6 @@ import io.vertx.core.http.HttpServerResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pans.gateway.config.TimeoutConfig;
-import pans.gateway.model.Endpoint;
 
 /**
  * gRPC proxy handler (HTTP/2 complete passthrough)
@@ -19,12 +18,17 @@ public class GrpcProxyHandler implements ProxyHandler {
     private static final String GRPC_CONTENT_TYPE = "application/grpc";
 
     private final HttpClient httpClient;
-    private final Endpoint endpoint;
+    private final String host;
+    private final int port;
     private final TimeoutConfig timeoutConfig;
 
-    public GrpcProxyHandler(HttpClient httpClient, Endpoint endpoint, TimeoutConfig timeoutConfig) {
+    /**
+     * Constructor with host and port
+     */
+    public GrpcProxyHandler(HttpClient httpClient, String host, int port, TimeoutConfig timeoutConfig) {
         this.httpClient = httpClient;
-        this.endpoint = endpoint;
+        this.host = host;
+        this.port = port;
         this.timeoutConfig = timeoutConfig;
     }
 
@@ -41,8 +45,8 @@ public class GrpcProxyHandler implements ProxyHandler {
         // Create HTTP/2 proxy request
         httpClient.request(
                 request.method(),
-                endpoint.getPort(),
-                endpoint.getHost(),
+                port,
+                host,
                 request.uri())
             .onSuccess(proxyRequest -> {
                 // Copy all headers (complete passthrough)
@@ -60,14 +64,14 @@ public class GrpcProxyHandler implements ProxyHandler {
 
                 request.endHandler(v -> {
                     proxyRequest.end();
-                    log.debug("gRPC request proxied to {}", endpoint.getAddress());
+                    log.debug("gRPC request proxied to {}:{}", host, port);
                 });
 
                 // Handle proxy response
                 proxyRequest.response()
                     .onSuccess(proxyResponse -> handleGrpcResponse(request, proxyResponse, response))
                     .onFailure(t -> {
-                        log.error("Response from gRPC backend {} failed: {}", endpoint.getAddress(), t.getMessage());
+                        log.error("Response from gRPC backend {}:{} failed: {}", host, port, t.getMessage());
                         if (!response.ended()) {
                             response.reset();
                         }
@@ -76,7 +80,7 @@ public class GrpcProxyHandler implements ProxyHandler {
                 request.resume();
             })
             .onFailure(t -> {
-                log.error("Request to gRPC backend {} failed: {}", endpoint.getAddress(), t.getMessage());
+                log.error("Request to gRPC backend {}:{} failed: {}", host, port, t.getMessage());
                 if (!response.ended()) {
                     response.reset();
                 }
@@ -87,9 +91,7 @@ public class GrpcProxyHandler implements ProxyHandler {
     private void handleGrpcResponse(HttpServerRequest clientRequest,
                                      HttpClientResponse proxyResponse,
                                      HttpServerResponse clientResponse) {
-        log.debug("Received gRPC response from {}: status {}",
-                endpoint.getAddress(),
-                proxyResponse.statusCode());
+        log.debug("Received gRPC response from {}:{} status {}", host, port, proxyResponse.statusCode());
 
         // Copy all headers (complete passthrough)
         clientResponse.setStatusCode(proxyResponse.statusCode());
@@ -116,11 +118,11 @@ public class GrpcProxyHandler implements ProxyHandler {
             });
 
             clientResponse.end();
-            log.debug("gRPC response completed from {}", endpoint.getAddress());
+            log.debug("gRPC response completed from {}:{}", host, port);
         });
 
         proxyResponse.exceptionHandler(t -> {
-            log.error("Error reading gRPC response from {}: {}", endpoint.getAddress(), t.getMessage());
+            log.error("Error reading gRPC response from {}:{} {}", host, port, t.getMessage());
             if (!clientResponse.ended()) {
                 clientResponse.reset();
             }

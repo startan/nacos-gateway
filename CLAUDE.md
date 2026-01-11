@@ -29,48 +29,62 @@
 
 
 ## 配置
-配置文件路径为 `src/main/resources/config.yaml`，您可以在启动时通过命令行参数指定自定义配置文件路径。
+配置文件路径默认为classpath下的 `nacos-gateway.yaml`或`nacos-gateway.yml`，您可以在启动时通过命令行参数`-c path/to/config.yaml`指定自定义配置文件位置。
 
 ### 配置文件结构
 ```yaml
-# 服务器配置
+# 网关服务配置：同时监听多个端口，支持路由转发到不同的后端服务组
 server:
-  port: 19848                   # 网关监听端口
+  ports:
+      apiV1: 18848                   # 网关提供的Nacos V1接口的服务端口（协议：HTTP）
+      apiV2: 19848                   # 网关提供的Nacos V2接口的服务端口（协议：gRPC）
+      apiConsole: 18080              # 网关提供的Nacos控制台API的服务端口（协议：HTTP）
+  rateLimit:
+    maxQps: 2000                     # 最大请求QPS (网关服务整体限制)
+    maxConnections: 10000            # 最大连接数 (网关服务整体限制)
+    maxQpsPerClient: 10              # 最大请求QPS (针对单个客户端，可被后端服务组配置覆盖)
+    maxConnectionsPerClient: 5       # 最大连接数 (针对单个客户端，可被后端服务组配置覆盖)
+  # 日志配置
+  logging:
+    level: INFO                      # 日志级别: TRACE, DEBUG, INFO, WARN, ERROR
+    verbose: false                   # 是否记录详细的请求/响应信息
 
 # 路由规则（仅在 router 模式下使用）
 routes:
-  - host: "*.nacos.io"         # 请求域名，星号为通配符
-    path: "/**"                # 请求路径，单个星号为对单端路径的通配符，双星号为全匹配
-    backend: example-service   # 路由转发目标后端服务名称
+  - host: "group1.nacos.io"          # 请求域名，星号为通配符
+    path: "/**"                      # 请求路径，单个星号为对单端路径的通配符，双星号为全匹配
+    backend: group1-service          # 路由转发目标后端服务名称
 
 # 后端服务配置
 backends:
-  - name: example-service      # 后端服务组名称
-    loadBalance: round-robin   # 负载均衡策略，支持类型：round-robin/random/least-connection
+  - name: group1-service             # 后端服务组名称
+    ports:
+      apiV1: 8848                    # 后端的Nacos V1接口服务端口（协议：HTTP）
+      apiV2: 9848                    # 后端的Nacos V2接口服务端口（协议：gRPC）
+      apiConsole: 8080               # 后端的Nacos控制台端口（协议：HTTP）
     probe:
-      path: /health            # 探测请求路径
-      periodSeconds: 10        # 执行探针的时间间隔
-      timeoutSeconds: 1        # 探针超时时间
-      successThreshold: 1      # 成功状态的阈值
-      failureThreshold: 3      # 失败状态的阈值
-    endpoints:                 # 后端服务端点列表
-      - host: 10.12.23.1
-        port: 9848
-        priority: 1
+      enabled: true                  # 是否启用健康检查
+      type: http                     # 探测类型，支持类型：http/tcp (默认：tcp)
+      path: /health                  # 探测请求路径（仅HTTP类型有效）
+      periodSeconds: 10              # 执行探针的时间间隔
+      timeoutSeconds: 1              # 探针超时时间
+      successThreshold: 1            # 成功状态的阈值
+      failureThreshold: 3            # 失败状态的阈值
+    loadBalance: round-robin         # 负载均衡策略，支持类型：round-robin/random/least-connection
+    rateLimit:
+      maxQps: 1000                   # 最大请求QPS (针对该后端服务组)
+      maxConnections: 2000           # 最大连接数 (针对该后端服务组)
+      maxQpsPerClient: 10            # 最大请求QPS (针对请求该后端服务组的单个客户端)
+      maxConnectionsPerClient: 5     # 最大连接数 (针对请求该后端服务组的单个客户端)
+    endpoints:                       # 后端服务端点列表
+      - host: 10.12.23.1             # 后端服务实例IP地址
+        priority: 10                 # 端点优先级，数值越小优先级越高(最小值：1，默认值：10)
       - host: 10.12.23.2
-        port: 9848
-        priority: 1
+        priority: 10
       - host: 10.12.23.3
-        port: 9848
-        priority: 2
+        priority: 20
       - host: 10.12.23.4
-        port: 9848
-        priority: 2
-
-# 日志配置
-logging:
-  level: INFO             # 日志级别: TRACE, DEBUG, INFO, WARN, ERROR
-  verbose: false          # 是否记录详细的请求/响应信息
+        priority: 20
 ```
 
 ## 系统要求

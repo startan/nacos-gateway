@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Health check task for a single endpoint
+ * Supports both HTTP and TCP health checks
  */
 public class HealthCheckTask {
 
@@ -26,6 +27,7 @@ public class HealthCheckTask {
     private final AtomicBoolean healthy;
     private final AtomicInteger consecutiveSuccesses;
     private final AtomicInteger consecutiveFailures;
+    private final TcpHealthChecker tcpHealthChecker;
     private long timerId;
 
     public HealthCheckTask(Vertx vertx, Endpoint endpoint, HealthProbeConfig config) {
@@ -35,6 +37,7 @@ public class HealthCheckTask {
         this.healthy = new AtomicBoolean(true); // Start with healthy
         this.consecutiveSuccesses = new AtomicInteger(0);
         this.consecutiveFailures = new AtomicInteger(0);
+        this.tcpHealthChecker = new TcpHealthChecker(vertx, endpoint, config);
     }
 
     public void start() {
@@ -57,26 +60,68 @@ public class HealthCheckTask {
     }
 
     private void checkHealth(long id) {
-        HttpClient client = createHttpClient();
+        // Check if health check is enabled
+        if (!config.isEnabled()) {
+            // If disabled, mark as healthy and return
+            healthy.set(true);
+            return;
+        }
 
-        client.request(HttpMethod.GET, config.getPath())
+        // Check health check type
+        if ("tcp".equalsIgnoreCase(config.getType())) {
+            // Use TCP health check
+            performTcpHealthCheck();
+        } else {
+            // Use HTTP health check (default)
+            performHttpHealthCheck();
+        }
+    }
+
+    /**
+     * Perform TCP-based health check
+     * Only checks if the port is reachable
+     */
+    private void performTcpHealthCheck() {
+        tcpHealthChecker.check()
+            .onSuccess(result -> {
+                if (result) {
+                    handleSuccess();
+                } else {
+                    handleFailure();
+                }
+            })
+            .onFailure(t -> {
+                log.warn("TCP health check failed for endpoint {}: {}", endpoint.getAddress(), t.getMessage());
+                handleFailure();
+            });
+    }
+
+    /**
+     * Perform HTTP-based health check
+     * Sends HTTP GET request to the health check path
+     */
+    private void performHttpHealthCheck() {
+        HttpClient client = createHttpClient();
+        int port = endpoint.getPort(); // Use apiV1 port for health checks
+
+        client.request(HttpMethod.GET, port, endpoint.getHost(), config.getPath())
             .onSuccess(request -> {
                 request.response()
                     .onSuccess(this::handleResponse)
                     .onFailure(t -> {
-                        log.warn("Health check failed for endpoint {}: {}", endpoint.getAddress(), t.getMessage());
+                        log.warn("HTTP health check failed for endpoint {}: {}", endpoint.getAddress(), t.getMessage());
                         handleFailure();
                     });
 
                 request.exceptionHandler(t -> {
-                    log.warn("Health check failed for endpoint {}: {}", endpoint.getAddress(), t.getMessage());
+                    log.warn("HTTP health check failed for endpoint {}: {}", endpoint.getAddress(), t.getMessage());
                     handleFailure();
                 });
 
                 request.end();
             })
             .onFailure(t -> {
-                log.warn("Health check failed for endpoint {}: {}", endpoint.getAddress(), t.getMessage());
+                log.warn("HTTP health check failed for endpoint {}: {}", endpoint.getAddress(), t.getMessage());
                 handleFailure();
             });
     }

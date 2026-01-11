@@ -23,6 +23,19 @@ public class ConnectionManager {
      */
     public void addConnection(HttpConnection clientConnection, ProxyConnection proxyConnection) {
         connections.put(clientConnection, proxyConnection);
+        // Register cleanup handlers (connection level)
+        HttpConnection connection = proxyConnection.getClientConnection();
+        connection.closeHandler(v -> {
+            log.debug("Connection {}: Normally closed", connection);
+            this.removeConnection(connection);
+            connection.close();
+        });
+
+        connection.exceptionHandler(t -> {
+            log.debug("Connection {}: Abnormally closed - {}", connection, t.getMessage());
+            this.removeConnection(connection);
+            connection.close();
+        });
         log.debug("Added connection: {} -> {}, total: {}",
                 clientConnection,
                 proxyConnection.getEndpoint().getAddress(),

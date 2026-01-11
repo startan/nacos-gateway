@@ -11,11 +11,10 @@ import io.vertx.core.net.HostAndPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pans.gateway.config.GatewayConfig;
-import pans.gateway.config.ManagementConfig;
+import pans.gateway.config.PortType;
 import pans.gateway.config.TimeoutConfig;
 import pans.gateway.health.HealthCheckManager;
 import pans.gateway.loadbalance.EndpointSelector;
-import pans.gateway.loadbalance.LoadBalancerFactory;
 import pans.gateway.management.HealthEndpoint;
 import pans.gateway.model.Backend;
 import pans.gateway.model.Endpoint;
@@ -27,13 +26,12 @@ import pans.gateway.ratelimit.RateLimitManager;
 import pans.gateway.route.Route;
 import pans.gateway.route.RouteMatcher;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Gateway server
+ * Gateway server for a specific port type
+ * Uses shared components (RouteMatcher, Backends, etc.) from GatewayServerManager
  */
 public class GatewayServer {
 
@@ -42,136 +40,94 @@ public class GatewayServer {
     private final Vertx vertx;
     private final GatewayConfig config;
     private final String configPath;
+    private final PortType portType;
+    private final int listeningPort;
 
     private HttpServer server;
-    private HttpClient httpClient;
 
-    // Core components
-    private RouteMatcher routeMatcher;
-    private Map<String, Backend> backends;
-    private EndpointSelector endpointSelector;
-    private ConnectionManager connectionManager;
-    private HealthCheckManager healthCheckManager;
-    private RateLimitManager rateLimitManager;
-    private HealthEndpoint healthEndpoint;
+    // Shared components (injected from GatewayServerManager)
+    private final RouteMatcher routeMatcher;
+    private final Map<String, Backend> backends;
+    private final EndpointSelector endpointSelector;
+    private final ConnectionManager connectionManager;
+    private final HealthCheckManager healthCheckManager;
+    private final RateLimitManager rateLimitManager;
+    private final HealthEndpoint healthEndpoint;
 
-    public GatewayServer(Vertx vertx, GatewayConfig config, String configPath) {
+    /**
+     * Constructor for multi-port gateway
+     * @param vertx Vert.x instance
+     * @param config Gateway configuration
+     * @param configPath Configuration file path
+     * @param portType The port type this server handles
+     * @param port The port number to listen on
+     * @param routeMatcher Shared route matcher
+     * @param backends Shared backends map
+     * @param endpointSelector Shared endpoint selector
+     * @param connectionManager Shared connection manager
+     * @param healthCheckManager Shared health check manager
+     * @param rateLimitManager Shared rate limit manager
+     * @param healthEndpoint Shared health endpoint
+     */
+    public GatewayServer(
+            Vertx vertx,
+            GatewayConfig config,
+            String configPath,
+            PortType portType,
+            int port,
+            RouteMatcher routeMatcher,
+            Map<String, Backend> backends,
+            EndpointSelector endpointSelector,
+            ConnectionManager connectionManager,
+            HealthCheckManager healthCheckManager,
+            RateLimitManager rateLimitManager,
+            HealthEndpoint healthEndpoint) {
         this.vertx = vertx;
         this.config = config;
         this.configPath = configPath;
+        this.portType = portType;
+        this.listeningPort = port;
+        this.routeMatcher = routeMatcher;
+        this.backends = backends;
+        this.endpointSelector = endpointSelector;
+        this.connectionManager = connectionManager;
+        this.healthCheckManager = healthCheckManager;
+        this.rateLimitManager = rateLimitManager;
+        this.healthEndpoint = healthEndpoint;
     }
 
     public void start() {
-        log.info("Starting Nacos Gateway...");
-
-        // Initialize components
-        initializeComponents();
+        log.info("Starting {} server on port {}...", portType.getDescription(), listeningPort);
 
         // Create HTTP server
         HttpServerOptions options = createServerOptions();
         server = vertx.createHttpServer(options);
 
-        // Create HTTP client (for HTTP/1 only, not used for HTTP/2)
-        httpClient = vertx.createHttpClient();
-
         // Request handler
         server.requestHandler(this::handleRequest);
 
         // Start server
-        server.listen(config.getServer().getPort())
-            .onSuccess(v -> log.info("Gateway started successfully on port {}", config.getServer().getPort()))
+        server.listen(listeningPort)
+            .onSuccess(v -> log.info("{} server started on port {}", portType.getDescription(), listeningPort))
             .onFailure(t -> {
-                log.error("Failed to start gateway: {}", t.getMessage());
-                throw new RuntimeException("Failed to start gateway", t);
+                log.error("Failed to start {} server: {}", portType.getDescription(), t.getMessage());
+                throw new RuntimeException("Failed to start server", t);
             });
     }
 
     public void stop() {
-        log.info("Stopping gateway...");
-
-        if (connectionManager != null) {
-            connectionManager.closeAll();
-        }
-
-        if (healthCheckManager != null) {
-            healthCheckManager.stopAll();
-        }
+        log.info("Stopping {} server on port {}...", portType.getDescription(), listeningPort);
 
         if (server != null) {
             server.close()
-                .onSuccess(v -> log.info("Gateway stopped"))
-                .onFailure(t -> log.error("Error stopping gateway: {}", t.getMessage()));
+                .onSuccess(v -> log.info("{} server on port {} stopped", portType.getDescription(), listeningPort))
+                .onFailure(t -> log.error("Error stopping {} server: {}", portType.getDescription(), t.getMessage()));
         }
-    }
-
-    private void initializeComponents() {
-        log.info("Initializing gateway components...");
-
-        // Initialize connection manager
-        connectionManager = new ConnectionManager();
-
-        // Initialize health check manager
-        healthCheckManager = new HealthCheckManager(vertx);
-
-        // Initialize rate limit manager
-        rateLimitManager = new RateLimitManager(config);
-
-        // Initialize routes and backends
-        initializeRoutesAndBackends();
-
-        // Initialize health endpoint
-        ManagementConfig mgmtConfig = config.getManagement();
-        if (mgmtConfig != null && mgmtConfig.getHealth() != null && mgmtConfig.getHealth().isEnabled()) {
-            healthEndpoint = new HealthEndpoint(mgmtConfig.getHealth().getPath());
-            log.info("Health endpoint enabled: {}", healthEndpoint.getPath());
-        }
-
-        log.info("Gateway components initialized");
-    }
-
-    private void initializeRoutesAndBackends() {
-        // Create routes
-        List<Route> routes = new ArrayList<>();
-        if (config.getRoutes() != null) {
-            for (var routeConfig : config.getRoutes()) {
-                Route route = new Route(routeConfig);
-                routes.add(route);
-            }
-        }
-
-        routeMatcher = new pans.gateway.route.RouteMatcherImpl(routes);
-        log.info("Loaded {} routes", routes.size());
-
-        // Create backends
-        backends = new HashMap<>();
-        if (config.getBackends() != null) {
-            for (var backendConfig : config.getBackends()) {
-                // Create endpoints
-                List<Endpoint> endpoints = new ArrayList<>();
-                for (var endpointConfig : backendConfig.getEndpoints()) {
-                    Endpoint endpoint = new Endpoint(endpointConfig);
-                    endpoints.add(endpoint);
-                }
-
-                // Create load balancer
-                var loadBalancer = LoadBalancerFactory.create(backendConfig.getLoadBalance());
-
-                // Create backend
-                Backend backend = new Backend(backendConfig.getName(), loadBalancer, endpoints);
-                backends.put(backend.getName(), backend);
-
-                // Start health checking
-                healthCheckManager.startBackendChecking(backendConfig, endpoints);
-            }
-        }
-
-        endpointSelector = new pans.gateway.loadbalance.EndpointSelector();
-        log.info("Loaded {} backends", backends.size());
     }
 
     private HttpServerOptions createServerOptions() {
         HttpServerOptions options = new HttpServerOptions();
-        options.setPort(config.getServer().getPort());
+        options.setPort(listeningPort);
         options.setAlpnVersions(List.of(HttpVersion.HTTP_2, HttpVersion.HTTP_1_1));
 
         TimeoutConfig timeout = config.getTimeout();
@@ -203,8 +159,9 @@ public class GatewayServer {
         HttpConnection connection = request.connection();
         HostAndPort hostAndPort = request.authority();
         String path = request.path();
+        String clientIp = request.remoteAddress().host();
 
-        log.debug("Received request: {} {}", request.method(), request.uri());
+        log.debug("Received request on {} port: {} {}", portType.getConfigName(), request.method(), request.uri());
 
         // Check health endpoint
         if (healthEndpoint != null && healthEndpoint.matches(path)) {
@@ -222,10 +179,11 @@ public class GatewayServer {
 
         Route route = routeOpt.get();
         String routeId = route.getId();
+        String backendName = route.getBackendName();
 
-        // Check rate limit (request-level)
-        if (!rateLimitManager.tryAcquire(routeId)) {
-            log.warn("Rate limit exceeded for route: {}", routeId);
+        // Check rate limit (three-tier: global, backend, client)
+        if (!rateLimitManager.tryAcquire(routeId, backendName, clientIp)) {
+            log.warn("Rate limit exceeded for route: {}, client: {}", routeId, clientIp);
             request.response().setStatusCode(429).end("Too Many Requests");
             return;
         }
@@ -237,11 +195,11 @@ public class GatewayServer {
             // First request on this connection - perform connection-level initialization
 
             // 1. Select backend and endpoint (load balancing)
-            Backend backend = backends.get(route.getBackendName());
+            Backend backend = backends.get(backendName);
             if (backend == null) {
-                log.error("Backend not found: {}", route.getBackendName());
+                log.error("Backend not found: {}", backendName);
                 request.response().setStatusCode(503).end("Service Unavailable - Backend not found");
-                rateLimitManager.release(routeId);
+                rateLimitManager.release(routeId, backendName, clientIp);
                 return;
             }
 
@@ -249,7 +207,7 @@ public class GatewayServer {
             if (endpoint == null) {
                 log.error("No healthy endpoint for backend: {}", backend.getName());
                 request.response().setStatusCode(503).end("Service Unavailable - No healthy endpoints");
-                rateLimitManager.release(routeId);
+                rateLimitManager.release(routeId, backendName, clientIp);
                 return;
             }
 
@@ -259,51 +217,50 @@ public class GatewayServer {
             // 3. Notify load balancer (connection level)
             backend.getLoadBalancer().onConnectionOpen(endpoint);
 
-            // 4. Create ProxyConnection with all resources
-            proxyConnection = new ProxyConnection(connection, route, endpoint, backend, clientHttpClient);
+            // 4. Create ProxyConnection with all resources including portType
+            proxyConnection = new ProxyConnection(connection, route, endpoint, backend, clientHttpClient, portType);
             connectionManager.addConnection(connection, proxyConnection);
 
-            log.debug("Connection {}: Created ProxyConnection with backend {}",
-                     connection, endpoint.getAddress());
-
-            // 5. Register cleanup handlers (connection level)
-            connection.closeHandler(v -> {
-                log.debug("Connection {}: Normally closed", connection);
-                connectionManager.removeConnection(connection);
-            });
-
-            connection.exceptionHandler(t -> {
-                log.debug("Connection {}: Abnormally closed - {}", connection, t.getMessage());
-                connectionManager.removeConnection(connection);
-            });
+            log.debug("Connection {}: Created ProxyConnection with {} for {} port",
+                     connection, endpoint.getAddress(), portType.getConfigName());
         }
 
-        // Use the connection's HttpClient and Endpoint for this request
+        // Use the connection's HttpClient and get the correct port for this portType
         try {
-            if (GrpcProxyHandler.isGrpcRequest(request)) {
-                GrpcProxyHandler grpcHandler = new GrpcProxyHandler(
-                        proxyConnection.getHttpClient(),
-                        proxyConnection.getEndpoint(),
-                        config.getTimeout()
-                );
-                grpcHandler.handle(request);
-            } else {
-                HttpProxyHandler httpHandler = new HttpProxyHandler(
-                        proxyConnection.getHttpClient(),
-                        proxyConnection.getEndpoint(),
-                        config.getTimeout()
-                );
-                httpHandler.handle(request);
+            Endpoint endpoint = proxyConnection.getEndpoint();
+            String backendHost = endpoint.getHost();
+            int backendPort = endpoint.getPortForType(portType);
+
+            switch (portType) {
+                case API_V1, API_CONSOLE -> {
+                    HttpProxyHandler httpHandler = new HttpProxyHandler(
+                            proxyConnection.getHttpClient(),
+                            backendHost,
+                            backendPort,
+                            config.getTimeout()
+                    );
+                    httpHandler.handle(request);
+                }
+                case API_V2 -> {
+                    GrpcProxyHandler grpcHandler = new GrpcProxyHandler(
+                            proxyConnection.getHttpClient(),
+                            backendHost,
+                            backendPort,
+                            config.getTimeout()
+                    );
+                    grpcHandler.handle(request);
+                }
             }
         } catch (Exception e) {
             log.error("Error proxying request: {}", e.getMessage(), e);
             if (!request.response().ended()) {
                 request.response().setStatusCode(500).end("Internal Server Error");
             }
-            rateLimitManager.release(routeId);
+            rateLimitManager.release(routeId, backendName, clientIp);
         }
     }
 
+    // Getters for shared components (for compatibility)
     public ConnectionManager getConnectionManager() {
         return connectionManager;
     }
@@ -322,5 +279,13 @@ public class GatewayServer {
 
     public RateLimitManager getRateLimitManager() {
         return rateLimitManager;
+    }
+
+    public PortType getPortType() {
+        return portType;
+    }
+
+    public int getListeningPort() {
+        return listeningPort;
     }
 }

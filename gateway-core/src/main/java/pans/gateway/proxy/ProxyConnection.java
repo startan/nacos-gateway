@@ -2,13 +2,14 @@ package pans.gateway.proxy;
 
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpConnection;
+import pans.gateway.config.PortType;
 import pans.gateway.model.Backend;
 import pans.gateway.model.Endpoint;
 import pans.gateway.route.Route;
 
 /**
  * Proxy connection representing a client-backend connection pair
- * Manages connection-level resources: HttpClient, Endpoint, Backend
+ * Manages connection-level resources: HttpClient, Endpoint, Backend, PortType
  */
 public class ProxyConnection {
 
@@ -17,15 +18,21 @@ public class ProxyConnection {
     private final Endpoint endpoint;
     private final Backend backend;
     private final HttpClient httpClient;
+    private final PortType portType;
     private final long createTime;
 
+    /**
+     * Constructor with port type
+     * Used when creating a proxy connection for a specific port type
+     */
     public ProxyConnection(HttpConnection clientConnection, Route route, Endpoint endpoint,
-                          Backend backend, HttpClient httpClient) {
+                          Backend backend, HttpClient httpClient, PortType portType) {
         this.clientConnection = clientConnection;
         this.route = route;
         this.endpoint = endpoint;
         this.backend = backend;
         this.httpClient = httpClient;
+        this.portType = portType;
         this.createTime = System.currentTimeMillis();
     }
 
@@ -47,6 +54,18 @@ public class ProxyConnection {
 
     public HttpClient getHttpClient() {
         return httpClient;
+    }
+
+    public PortType getPortType() {
+        return portType;
+    }
+
+    /**
+     * Get the backend port for this connection's port type
+     * @return the port number
+     */
+    public int getBackendPort() {
+        return endpoint.getPortForType(portType);
     }
 
     public long getCreateTime() {

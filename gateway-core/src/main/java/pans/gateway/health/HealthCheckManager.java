@@ -5,15 +5,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pans.gateway.config.BackendConfig;
 import pans.gateway.config.HealthProbeConfig;
+import pans.gateway.config.PortType;
 import pans.gateway.model.Endpoint;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Health check manager
+ * Manages health check tasks for all endpoints
+ * Health checks always use apiV1 port for backend services
  */
 public class HealthCheckManager {
 
@@ -28,9 +29,12 @@ public class HealthCheckManager {
 
     /**
      * Start health checking for all endpoints in a backend
+     * Always uses apiV1 port for health checks
      */
-    public void startBackendChecking(BackendConfig backendConfig, List<Endpoint> endpoints) {
+    public void startBackendChecking(BackendConfig backendConfig, java.util.List<Endpoint> endpoints) {
         HealthProbeConfig probeConfig = backendConfig.getProbe();
+
+        // Check if probe is configured and enabled
         if (probeConfig == null) {
             log.info("No health probe configured for backend: {}", backendConfig.getName());
             // Mark all endpoints as healthy
@@ -40,8 +44,32 @@ public class HealthCheckManager {
             return;
         }
 
+        // Check if health check is enabled
+        if (!probeConfig.isEnabled()) {
+            log.info("Health check disabled for backend: {}", backendConfig.getName());
+            // Mark all endpoints as healthy
+            for (Endpoint endpoint : endpoints) {
+                endpoint.setHealthy(true);
+            }
+            return;
+        }
+
+        // Use apiV1 port for health checks (create temporary endpoint with apiV1 port only)
+        int healthCheckPort = backendConfig.getPorts().getApiV1();
+
         for (Endpoint endpoint : endpoints) {
-            startChecking(endpoint, probeConfig);
+            // Create a temporary endpoint with only the health check port
+            Endpoint healthEndpoint = new Endpoint(
+                    endpoint.getHost(),
+                    healthCheckPort,
+                    healthCheckPort,
+                    healthCheckPort,
+                    endpoint.getPriority()
+            );
+
+            startChecking(healthEndpoint, probeConfig);
+            log.info("Started health check for {} using apiV1 port {}",
+                    endpoint.getHost(), healthCheckPort);
         }
     }
 

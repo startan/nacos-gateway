@@ -74,7 +74,7 @@ public class ConfigLoader {
         // Validate configuration
         validate(config);
 
-        log.info("Configuration loaded successfully: {}", config);
+        log.info("Configuration loaded successfully");
         return config;
     }
 
@@ -105,11 +105,38 @@ public class ConfigLoader {
         }
 
         // Validate server config
-        if (config.getServer() == null) {
+        ServerConfig serverConfig = config.getServer();
+        if (serverConfig == null) {
             throw new IOException("Server configuration is missing");
         }
-        if (config.getServer().getPort() <= 0 || config.getServer().getPort() > 65535) {
-            throw new IOException("Invalid server port: " + config.getServer().getPort());
+
+        // Validate server ports configuration
+        if (serverConfig.getPorts() == null) {
+            throw new IOException("Server ports configuration is missing");
+        }
+
+        // Validate all server ports
+        Set<Integer> usedServerPorts = new HashSet<>();
+        ServerConfig.PortsConfig ports = serverConfig.getPorts();
+        validatePort(ports.getApiV1(), "server.apiV1", usedServerPorts);
+        validatePort(ports.getApiV2(), "server.apiV2", usedServerPorts);
+        validatePort(ports.getApiConsole(), "server.apiConsole", usedServerPorts);
+
+        // Validate server rate limit config (now under server section)
+        if (serverConfig.getRateLimit() != null) {
+            ServerConfig.ServerRateLimitConfig rateLimit = serverConfig.getRateLimit();
+            if (rateLimit.getMaxQps() <= 0) {
+                throw new IOException("Server max QPS must be positive");
+            }
+            if (rateLimit.getMaxConnections() <= 0) {
+                throw new IOException("Server max connections must be positive");
+            }
+            if (rateLimit.getMaxQpsPerClient() <= 0) {
+                throw new IOException("Server max QPS per client must be positive");
+            }
+            if (rateLimit.getMaxConnectionsPerClient() <= 0) {
+                throw new IOException("Server max connections per client must be positive");
+            }
         }
 
         // Validate routes
@@ -132,7 +159,23 @@ public class ConfigLoader {
             }
             backendNames.add(backend.getName());
 
-            // Validate endpoints
+            // Validate backend ports configuration
+            if (backend.getPorts() == null) {
+                throw new IOException("Backend '" + backend.getName() + "' missing ports configuration");
+            }
+
+            BackendConfig.BackendPortsConfig backendPorts = backend.getPorts();
+            if (backendPorts.getApiV1() <= 0 || backendPorts.getApiV1() > 65535) {
+                throw new IOException("Invalid apiV1 port for backend '" + backend.getName() + "': " + backendPorts.getApiV1());
+            }
+            if (backendPorts.getApiV2() <= 0 || backendPorts.getApiV2() > 65535) {
+                throw new IOException("Invalid apiV2 port for backend '" + backend.getName() + "': " + backendPorts.getApiV2());
+            }
+            if (backendPorts.getApiConsole() <= 0 || backendPorts.getApiConsole() > 65535) {
+                throw new IOException("Invalid apiConsole port for backend '" + backend.getName() + "': " + backendPorts.getApiConsole());
+            }
+
+            // Validate endpoints (no port field anymore)
             if (backend.getEndpoints() == null || backend.getEndpoints().isEmpty()) {
                 throw new IOException("Backend '" + backend.getName() + "' has no endpoints");
             }
@@ -141,9 +184,7 @@ public class ConfigLoader {
                 if (endpoint.getHost() == null || endpoint.getHost().isEmpty()) {
                     throw new IOException("Endpoint host is required for backend '" + backend.getName() + "'");
                 }
-                if (endpoint.getPort() <= 0 || endpoint.getPort() > 65535) {
-                    throw new IOException("Invalid port for endpoint '" + endpoint.getHost() + "' in backend '" + backend.getName() + "': " + endpoint.getPort());
-                }
+                // Port validation removed - port is at backend level now
             }
 
             // Validate load balance strategy
@@ -152,6 +193,23 @@ public class ConfigLoader {
                     !loadBalance.equals("random") &&
                     !loadBalance.equals("least-connection"))) {
                 throw new IOException("Invalid load balance strategy for backend '" + backend.getName() + "': " + loadBalance);
+            }
+
+            // Validate backend rate limit config (if configured)
+            BackendConfig.BackendRateLimitConfig backendRateLimit = backend.getRateLimit();
+            if (backendRateLimit != null) {
+                if (backendRateLimit.getMaxQps() <= 0) {
+                    throw new IOException("Backend max QPS must be positive for backend '" + backend.getName() + "'");
+                }
+                if (backendRateLimit.getMaxConnections() <= 0) {
+                    throw new IOException("Backend max connections must be positive for backend '" + backend.getName() + "'");
+                }
+                if (backendRateLimit.getMaxQpsPerClient() < 0) {
+                    throw new IOException("Backend max QPS per client must be non-negative for backend '" + backend.getName() + "'");
+                }
+                if (backendRateLimit.getMaxConnectionsPerClient() < 0) {
+                    throw new IOException("Backend max connections per client must be non-negative for backend '" + backend.getName() + "'");
+                }
             }
         }
 
@@ -171,23 +229,6 @@ public class ConfigLoader {
             }
         }
 
-        // Validate rate limit config
-        RateLimitConfig rateLimit = config.getRateLimit();
-        if (rateLimit != null) {
-            if (rateLimit.getGlobalQpsLimit() <= 0) {
-                throw new IOException("Global QPS limit must be positive");
-            }
-            if (rateLimit.getGlobalMaxConnections() <= 0) {
-                throw new IOException("Global max connections must be positive");
-            }
-            if (rateLimit.getDefaultQpsLimit() <= 0) {
-                throw new IOException("Default QPS limit must be positive");
-            }
-            if (rateLimit.getDefaultMaxConnections() <= 0) {
-                throw new IOException("Default max connections must be positive");
-            }
-        }
-
         // Validate timeout config
         TimeoutConfig timeout = config.getTimeout();
         if (timeout != null) {
@@ -203,5 +244,15 @@ public class ConfigLoader {
         }
 
         log.info("Configuration validation passed");
+    }
+
+    private void validatePort(int port, String portName, Set<Integer> usedPorts) throws IOException {
+        if (port <= 0 || port > 65535) {
+            throw new IOException("Invalid " + portName + " port: " + port);
+        }
+        if (usedPorts.contains(port)) {
+            throw new IOException("Duplicate port number: " + port + " for " + portName);
+        }
+        usedPorts.add(port);
     }
 }

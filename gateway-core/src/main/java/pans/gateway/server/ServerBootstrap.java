@@ -10,6 +10,7 @@ import pans.gateway.config.GatewayConfig;
 
 /**
  * Server bootstrap
+ * Manages the GatewayServerManager which handles multiple gateway servers
  */
 public class ServerBootstrap {
 
@@ -17,7 +18,7 @@ public class ServerBootstrap {
 
     private final String configPath;
     private Vertx vertx;
-    private GatewayServer gatewayServer;
+    private GatewayServerManager gatewayServerManager;
     private ConfigWatcher configWatcher;
 
     public ServerBootstrap(String configPath) {
@@ -25,10 +26,6 @@ public class ServerBootstrap {
     }
 
     public void start() throws Exception {
-        log.info("=================================================");
-        log.info("    Nacos Gateway - Starting...");
-        log.info("=================================================");
-
         // Load configuration
         ConfigLoader configLoader = new ConfigLoader();
         GatewayConfig config = configLoader.load(configPath);
@@ -36,29 +33,28 @@ public class ServerBootstrap {
         // Create Vert.x instance
         vertx = Vertx.vertx();
 
-        // Create and start gateway server
-        gatewayServer = new GatewayServer(vertx, config, configPath);
-        gatewayServer.start();
+        // Create and start gateway server manager (manages multiple servers)
+        gatewayServerManager = new GatewayServerManager(vertx, config, configPath);
+        gatewayServerManager.start();
 
-        // Create config reloader
+        // Create config reloader with shared components from GatewayServerManager
         ConfigReloader reloader = new ConfigReloader(
                 configLoader,
-                gatewayServer.getConnectionManager(),
-                gatewayServer.getHealthCheckManager(),
-                gatewayServer.getRateLimitManager()
+                gatewayServerManager.getConnectionManager(),
+                gatewayServerManager.getHealthCheckManager(),
+                gatewayServerManager.getRateLimitManager()
         );
 
         // Initialize reloader with current state
-        reloader.setRouteMatcher(gatewayServer.getRouteMatcher());
-        reloader.setBackends(gatewayServer.getBackends());
+        reloader.setRouteMatcher(gatewayServerManager.getRouteMatcher());
+        reloader.setBackends(gatewayServerManager.getBackends());
 
         // Start config watcher
         configWatcher = new ConfigWatcher(vertx, configPath, reloader);
         configWatcher.start();
 
         log.info("=================================================");
-        log.info("    Nacos Gateway - Started Successfully!");
-        log.info("    Listening on port: {}", config.getServer().getPort());
+        log.info("    All Gateway Servers Started Successfully!");
         log.info("=================================================");
     }
 
@@ -69,8 +65,8 @@ public class ServerBootstrap {
             configWatcher.stop();
         }
 
-        if (gatewayServer != null) {
-            gatewayServer.stop();
+        if (gatewayServerManager != null) {
+            gatewayServerManager.stop();
         }
 
         if (vertx != null) {

@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pans.gateway.health.HealthCheckManager;
 import pans.gateway.loadbalance.EndpointSelector;
+import pans.gateway.loadbalance.LoadBalancerFactory;
 import pans.gateway.model.Backend;
 import pans.gateway.model.Endpoint;
 import pans.gateway.proxy.ConnectionManager;
@@ -33,6 +34,8 @@ public class ConfigReloader {
     private Map<String, Backend> backends;
     private EndpointSelector endpointSelector;
 
+    private GatewayConfig currentConfig;
+
     public ConfigReloader(ConfigLoader configLoader,
                          ConnectionManager connectionManager,
                          HealthCheckManager healthCheckManager,
@@ -55,6 +58,10 @@ public class ConfigReloader {
         this.endpointSelector = endpointSelector;
     }
 
+    public void setCurrentConfig(GatewayConfig config) {
+        this.currentConfig = config;
+    }
+
     /**
      * Reload configuration from file
      */
@@ -63,6 +70,11 @@ public class ConfigReloader {
             // Load new configuration
             GatewayConfig newConfig = configLoader.load(configPath);
             log.info("New configuration loaded successfully");
+
+            // Check if ports changed - requires restart
+            if (hasPortsChanged(newConfig)) {
+                log.warn("Port configuration changed - requires restart for changes to take effect");
+            }
 
             // Update routes
             updateRoutes(newConfig);
@@ -78,12 +90,33 @@ public class ConfigReloader {
                 connectionManager.disconnectInvalidConnections(routeMatcher);
             }
 
+            // Update current config
+            currentConfig = newConfig;
+
             log.info("Configuration reloaded successfully");
 
         } catch (Exception e) {
             log.error("Failed to reload configuration: {}", e.getMessage(), e);
             throw new RuntimeException("Configuration reload failed", e);
         }
+    }
+
+    /**
+     * Check if port configuration has changed
+     */
+    private boolean hasPortsChanged(GatewayConfig newConfig) {
+        if (currentConfig == null || currentConfig.getServer() == null) {
+            return false;
+        }
+
+        ServerConfig oldServer = currentConfig.getServer();
+        ServerConfig newServer = newConfig.getServer();
+
+        if (oldServer.getPorts() == null || newServer.getPorts() == null) {
+            return false;
+        }
+
+        return !oldServer.getPorts().equals(newServer.getPorts());
     }
 
     private void updateRoutes(GatewayConfig newConfig) {
@@ -109,28 +142,30 @@ public class ConfigReloader {
 
         if (newConfig.getBackends() != null) {
             for (BackendConfig backendConfig : newConfig.getBackends()) {
-                // Create endpoints
+                // Create endpoints with port configuration
                 List<Endpoint> endpoints = new ArrayList<>();
-                for (var endpointConfig : backendConfig.getEndpoints()) {
-                    Endpoint endpoint = new Endpoint(endpointConfig);
-                    endpoints.add(endpoint);
+                if (backendConfig.getEndpoints() != null) {
+                    for (var endpointConfig : backendConfig.getEndpoints()) {
+                        // Pass both endpoint config and backend ports to Endpoint constructor
+                        Endpoint endpoint = new Endpoint(endpointConfig, backendConfig.getPorts());
+                        endpoints.add(endpoint);
+                    }
                 }
 
                 // Create load balancer
-                var loadBalancer = pans.gateway.loadbalance.LoadBalancerFactory.create(
-                        backendConfig.getLoadBalance()
-                );
+                var loadBalancer = LoadBalancerFactory.create(backendConfig.getLoadBalance());
 
-                // Create backend
+                // Create backend with config reference
                 Backend backend = new Backend(
                         backendConfig.getName(),
                         loadBalancer,
-                        endpoints
+                        endpoints,
+                        backendConfig  // Pass backendConfig to enable port and rate limit access
                 );
 
                 newBackends.put(backend.getName(), backend);
 
-                // Start health checking
+                // Start health checking (uses apiV1 port)
                 healthCheckManager.startBackendChecking(backendConfig, endpoints);
             }
         }
@@ -145,16 +180,10 @@ public class ConfigReloader {
     }
 
     private void updateRateLimiters(GatewayConfig newConfig) {
-        // Update route-level rate limiters
-        if (newConfig.getRoutes() != null && routeMatcher != null) {
-            for (RouteConfig routeConfig : newConfig.getRoutes()) {
-                // Find the corresponding route
-                // Note: This is a simplified approach, in practice you'd want to match by ID
-                rateLimitManager.updateRouteLimiter(
-                        routeConfig.getHost() + ":" + routeConfig.getPath(),
-                        routeConfig,
-                        newConfig
-                );
+        // Update backend rate limiters
+        if (newConfig.getBackends() != null) {
+            for (BackendConfig backendConfig : newConfig.getBackends()) {
+                rateLimitManager.updateBackendLimiter(backendConfig.getName(), backendConfig);
             }
         }
 
@@ -171,5 +200,9 @@ public class ConfigReloader {
 
     public EndpointSelector getEndpointSelector() {
         return endpointSelector;
+    }
+
+    public GatewayConfig getCurrentConfig() {
+        return currentConfig;
     }
 }
