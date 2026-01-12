@@ -17,9 +17,6 @@ public class GatewayConfig {
     @JsonProperty("backends")
     private List<BackendConfig> backends;
 
-    @JsonProperty("rateLimit")
-    private RateLimitConfig rateLimit;
-
     @JsonProperty("timeout")
     private TimeoutConfig timeout;
 
@@ -53,14 +50,6 @@ public class GatewayConfig {
         this.backends = backends;
     }
 
-    public RateLimitConfig getRateLimit() {
-        return rateLimit;
-    }
-
-    public void setRateLimit(RateLimitConfig rateLimit) {
-        this.rateLimit = rateLimit;
-    }
-
     public TimeoutConfig getTimeout() {
         return timeout;
     }
@@ -91,7 +80,6 @@ public class GatewayConfig {
                 "server=" + server +
                 ", routes=" + routes +
                 ", backends=" + backends +
-                ", rateLimit=" + rateLimit +
                 ", timeout=" + timeout +
                 ", logging=" + logging +
                 ", management=" + management +
