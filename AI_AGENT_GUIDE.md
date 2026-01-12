@@ -52,8 +52,7 @@ pans.gateway/
 │   ├── RouteMatcher (interface)     # 路由匹配器
 │   ├── RouteMatcherImpl             # 路由匹配器实现
 │   ├── RouteTable                   # 路由表管理
-│   ├── HostMatcher                  # Host 匹配器
-│   └── PathMatcher                  # Path 匹配器
+│   └── HostMatcher                  # Host 匹配器
 │
 ├── loadbalance/                     # 负载均衡
 │   ├── LoadBalancer (interface)     # 负载均衡器接口
@@ -197,7 +196,7 @@ RouteMatcher → RateLimitManager → LoadBalancer → ProxyHandler
      RETURN
 
 2. 路由匹配
-   route = RouteMatcher.match(host, path)
+   route = RouteMatcher.match(host)
    IF route == null THEN
      RETURN 404 Not Found
 
@@ -263,19 +262,6 @@ HostMatcher.match(pattern, host):
   IF pattern 是 "*.xxx.com" THEN
     regex = pattern.replace("*.", "[^.]+\\.").replace(".", "\\.")
     RETURN host.matches("^" + regex + "$")
-
-PathMatcher.match(pattern, path):
-  IF pattern 是 "/abc/**" THEN
-    RETURN path.equals("/abc") OR path.startsWith("/abc/")
-
-  IF pattern 是 "/abc/*" THEN
-    RETURN path.startsWith("/abc/") AND path.substring(5) 不包含 '/'
-
-  IF pattern 包含 '*' THEN
-    regex = convertToRegex(pattern)
-    RETURN path.matches("^" + regex + "$")
-
-  RETURN pattern.equals(path)
 ```
 
 ### 负载均衡算法

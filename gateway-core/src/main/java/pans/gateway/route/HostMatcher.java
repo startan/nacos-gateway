@@ -47,8 +47,4 @@ public class HostMatcher {
         // Wildcard match
         return regex.matcher(host).matches();
     }
-
-    public String getPattern() {
-        return pattern;
-    }
 }

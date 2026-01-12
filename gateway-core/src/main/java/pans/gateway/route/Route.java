@@ -10,25 +10,19 @@ import java.util.UUID;
 public class Route {
 
     private final String hostPattern;
-    private final String pathPattern;
     private final String backendName;
 
     public Route(RouteConfig config) {
         this.hostPattern = config.getHost();
-        this.pathPattern = config.getPath();
         this.backendName = config.getBackend();
     }
 
     public String getId() {
-        return hostPattern + '#' + pathPattern;
+        return hostPattern;
     }
 
     public String getHostPattern() {
         return hostPattern;
-    }
-
-    public String getPathPattern() {
-        return pathPattern;
     }
 
     public String getBackendName() {
@@ -39,7 +33,6 @@ public class Route {
     public String toString() {
         return "Route{" +
                 "hostPattern='" + hostPattern + '\'' +
-                ", pathPattern='" + pathPattern + '\'' +
                 ", backendName='" + backendName + '\'' +
                 '}';
     }

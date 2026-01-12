@@ -52,7 +52,6 @@ server:
 # 路由规则（仅在 router 模式下使用）
 routes:
   - host: "group1.nacos.io"          # 请求域名，星号为通配符
-    path: "/**"                      # 请求路径，单个星号为对单端路径的通配符，双星号为全匹配
     backend: group1-service          # 路由转发目标后端服务名称
 
 # 后端服务配置

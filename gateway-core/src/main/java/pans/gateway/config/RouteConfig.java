@@ -10,9 +10,6 @@ public class RouteConfig {
     @JsonProperty("host")
     private String host;
 
-    @JsonProperty("path")
-    private String path;
-
     @JsonProperty("backend")
     private String backend;
 
@@ -22,14 +19,6 @@ public class RouteConfig {
 
     public void setHost(String host) {
         this.host = host;
-    }
-
-    public String getPath() {
-        return path;
-    }
-
-    public void setPath(String path) {
-        this.path = path;
     }
 
     public String getBackend() {
@@ -44,7 +33,6 @@ public class RouteConfig {
     public String toString() {
         return "RouteConfig{" +
                 "host='" + host + '\'' +
-                ", path='" + path + '\'' +
                 ", backend='" + backend + '\'' +
                 '}';
     }

@@ -218,9 +218,6 @@ public class ConfigLoader {
             if (route.getHost() == null || route.getHost().isEmpty()) {
                 throw new IOException("Route host is required");
             }
-            if (route.getPath() == null || route.getPath().isEmpty()) {
-                throw new IOException("Route path is required");
-            }
             if (route.getBackend() == null || route.getBackend().isEmpty()) {
                 throw new IOException("Route backend is required for host: " + route.getHost());
             }

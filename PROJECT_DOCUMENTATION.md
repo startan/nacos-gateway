@@ -23,7 +23,7 @@
 ### 1.2 核心特性
 
 - **多协议支持**: HTTP/1、HTTP/2、gRPC（完全透传，无需 proto 文件）
-- **智能路由**: 基于 Host 和 Path 的通配符路由匹配
+- **智能路由**: 基于 Host 的通配符路由匹配
 - **负载均衡**: 轮询、随机、最少连接三种策略
 - **优先级分组**: 端点优先级机制，高优先级全挂才降级
 - **健康检查**: HTTP/1 和 HTTP/2 探针，连续阈值机制
@@ -285,7 +285,7 @@ nacos-gateway-java/
 
 2. 路由匹配
    ├─ 检查是否为管理接口请求（/health）
-   ├─ 根据 Host 和 Path 匹配路由规则
+   ├─ 根据 Host 匹配路由规则
    └─ 找到对应的后端服务配置
 
 3. 限流检查
@@ -970,10 +970,9 @@ public interface RouteMatcher {
     /**
      * 匹配路由
      * @param host Host 头
-     * @param path 请求路径
      * @return 匹配的路由
      */
-    Optional<Route> match(String host, String path);
+    Optional<Route> match(String host);
 }
 ```
 

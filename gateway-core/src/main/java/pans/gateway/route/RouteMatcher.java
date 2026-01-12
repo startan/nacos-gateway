@@ -8,7 +8,7 @@ import java.util.Optional;
 public interface RouteMatcher {
 
     /**
-     * Match a route by host and path
+     * Match a route by host
      */
-    Optional<Route> match(String host, String path);
+    Optional<Route> match(String host);
 }

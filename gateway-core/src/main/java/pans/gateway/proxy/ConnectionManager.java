@@ -99,7 +99,7 @@ public class ConnectionManager {
             Route route = proxyConnection.getRoute();
 
             // Check if route still exists
-            boolean routeExists = newRouteMatcher.match(route.getHostPattern(), route.getPathPattern()).isPresent();
+            boolean routeExists = newRouteMatcher.match(route.getHostPattern()).isPresent();
 
             if (!routeExists) {
                 // Close the connection

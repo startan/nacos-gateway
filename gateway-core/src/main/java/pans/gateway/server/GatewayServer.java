@@ -187,9 +187,9 @@ public class GatewayServer {
         }
 
         // Match route
-        var routeOpt = routeMatcher.match(hostAndPort.host(), path);
+        var routeOpt = routeMatcher.match(hostAndPort.host());
         if (routeOpt.isEmpty()) {
-            log.warn("No route matched for host: {}, path: {}", hostAndPort.host(), path);
+            log.warn("No route matched for host: {}", hostAndPort.host());
             request.response().setStatusCode(404).end("Not Found");
             return;
         }

@@ -14,10 +14,8 @@ server:
 # Routes configuration
 routes:
   - host: "localhost.dev"          # Request domain (supports wildcard *)
-    path: "/**"                    # Request path (supports * and **)
     backend: local-nacos           # Target backend service name
-  - host: "localhost"          # Request domain (supports wildcard *)
-    path: "/**"                    # Request path (supports * and **)
+  - host: "localhost"              # Request domain (supports wildcard *)
     backend: local-nacos           # Target backend service name
 
 

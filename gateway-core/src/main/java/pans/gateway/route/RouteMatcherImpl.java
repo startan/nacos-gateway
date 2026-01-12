@@ -29,8 +29,7 @@ public class RouteMatcherImpl implements RouteMatcher {
 
     public void addRoute(Route route) {
         HostMatcher hostMatcher = new HostMatcher(route.getHostPattern());
-        PathMatcher pathMatcher = new PathMatcher(route.getPathPattern());
-        routes.add(new RouteMatchEntry(route, hostMatcher, pathMatcher));
+        routes.add(new RouteMatchEntry(route, hostMatcher));
         log.debug("Added route matcher for: {}", route);
     }
 
@@ -50,32 +49,30 @@ public class RouteMatcherImpl implements RouteMatcher {
     }
 
     @Override
-    public Optional<Route> match(String host, String path) {
-        if (host == null || path == null) {
+    public Optional<Route> match(String host) {
+        if (host == null) {
             return Optional.empty();
         }
 
         // Find first matching route
         for (RouteMatchEntry entry : routes) {
-            if (entry.hostMatcher.matches(host) && entry.pathMatcher.matches(path)) {
-                log.debug("Route matched: host={}, path={}, route={}", host, path, entry.route);
+            if (entry.hostMatcher.matches(host)) {
+                log.debug("Route matched: host={}, route={}", host, entry.route);
                 return Optional.of(entry.route);
             }
         }
 
-        log.debug("No route matched: host={}, path={}", host, path);
+        log.debug("No route matched: host={}", host);
         return Optional.empty();
     }
 
     private static class RouteMatchEntry {
         final Route route;
         final HostMatcher hostMatcher;
-        final PathMatcher pathMatcher;
 
-        RouteMatchEntry(Route route, HostMatcher hostMatcher, PathMatcher pathMatcher) {
+        RouteMatchEntry(Route route, HostMatcher hostMatcher) {
             this.route = route;
             this.hostMatcher = hostMatcher;
-            this.pathMatcher = pathMatcher;
         }
     }
 }
