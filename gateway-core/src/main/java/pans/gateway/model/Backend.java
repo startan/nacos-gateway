@@ -4,9 +4,12 @@ import pans.gateway.config.BackendConfig;
 import pans.gateway.config.BackendConfig.BackendRateLimitConfig;
 import pans.gateway.config.PortType;
 import pans.gateway.loadbalance.LoadBalancer;
+import pans.gateway.loadbalance.LoadBalancerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -18,6 +21,44 @@ public class Backend {
     private final LoadBalancer loadBalancer;
     private final List<Endpoint> endpoints;
     private final BackendConfig backendConfig;
+
+    /**
+     * Static factory method to build a Backend from configuration
+     * @param config Backend configuration
+     * @return New Backend instance
+     */
+    public static Backend from(BackendConfig config) {
+        // Create endpoints
+        List<Endpoint> endpoints = new ArrayList<>();
+        if (config.getEndpoints() != null) {
+            for (var endpointConfig : config.getEndpoints()) {
+                Endpoint endpoint = Endpoint.from(endpointConfig, config.getPorts());
+                endpoints.add(endpoint);
+            }
+        }
+
+        // Create load balancer
+        LoadBalancer loadBalancer = LoadBalancerFactory.create(config.getLoadBalance());
+
+        // Create and return backend
+        return new Backend(config.getName(), loadBalancer, endpoints, config);
+    }
+
+    /**
+     * Static factory method to build a map of backends from backend configurations
+     * @param backendConfigs List of backend configurations
+     * @return Map of backend name to Backend
+     */
+    public static Map<String, Backend> fromList(List<BackendConfig> backendConfigs) {
+        Map<String, Backend> backendsMap = new ConcurrentHashMap<>();
+        if (backendConfigs != null) {
+            for (BackendConfig config : backendConfigs) {
+                Backend backend = Backend.from(config);
+                backendsMap.put(backend.getName(), backend);
+            }
+        }
+        return backendsMap;
+    }
 
     public Backend(String name, LoadBalancer loadBalancer, List<Endpoint> endpoints, BackendConfig backendConfig) {
         this.name = name;
@@ -77,15 +118,6 @@ public class Backend {
             throw new IllegalStateException("Backend '" + name + "' does not have port configuration");
         }
         return backendConfig.getPorts().getPortForType(portType.getConfigName());
-    }
-
-    /**
-     * Get port for specific port type by config name
-     * @param portType the port type config name
-     * @return the port number
-     */
-    public int getPortForType(String portType) {
-        return getPortForType(PortType.fromConfigName(portType));
     }
 
     @Override

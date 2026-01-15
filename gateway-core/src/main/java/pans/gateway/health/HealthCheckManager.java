@@ -5,15 +5,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pans.gateway.config.BackendConfig;
 import pans.gateway.config.HealthProbeConfig;
-import pans.gateway.config.PortType;
+import pans.gateway.model.Backend;
 import pans.gateway.model.Endpoint;
+import pans.gateway.registry.GatewayRegistry;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Health check manager
  * Manages health check tasks for all endpoints
+ * Updates health status directly on cached Endpoint objects (no events needed)
  * Health checks always use apiV1 port for backend services
  */
 public class HealthCheckManager {
@@ -21,60 +24,51 @@ public class HealthCheckManager {
     private static final Logger log = LoggerFactory.getLogger(HealthCheckManager.class);
 
     private final Vertx vertx;
+    private final GatewayRegistry registry;
     private final Map<Endpoint, HealthCheckTask> tasks = new ConcurrentHashMap<>();
 
-    public HealthCheckManager(Vertx vertx) {
+    public HealthCheckManager(Vertx vertx, GatewayRegistry registry) {
         this.vertx = vertx;
+        this.registry = registry;
     }
 
     /**
-     * Start health checking for all endpoints in a backend
-     * Always uses apiV1 port for health checks
+     * Start health checking for all backends
+     * Gets endpoints from registry and updates them directly (no temporary objects)
      */
-    public void startBackendChecking(BackendConfig backendConfig, java.util.List<Endpoint> endpoints) {
-        HealthProbeConfig probeConfig = backendConfig.getProbe();
+    public void startBackendChecking() {
+        Map<String, Backend> backends = registry.getBackends();
 
-        // Check if probe is configured and enabled
-        if (probeConfig == null) {
-            log.info("No health probe configured for backend: {}", backendConfig.getName());
-            // Mark all endpoints as healthy
-            for (Endpoint endpoint : endpoints) {
-                endpoint.setHealthy(true);
+        for (Backend backend : backends.values()) {
+            BackendConfig backendConfig = backend.getBackendConfig();
+            if (backendConfig == null) {
+                // unreachable branch
+                continue;
             }
-            return;
-        }
-
-        // Check if health check is enabled
-        if (!probeConfig.isEnabled()) {
-            log.info("Health check disabled for backend: {}", backendConfig.getName());
-            // Mark all endpoints as healthy
-            for (Endpoint endpoint : endpoints) {
-                endpoint.setHealthy(true);
+            HealthProbeConfig probeConfig = backendConfig.getProbe();
+            // Check if probe is configured and enabled
+            if (probeConfig == null || !probeConfig.isEnabled()) {
+                log.info("Health check disabled for backend: {}", backendConfig.getName());
+                // Mark all endpoints as healthy
+                for (Endpoint endpoint : backend.getEndpoints()) {
+                    endpoint.setHealthy(true);
+                }
+                continue;
             }
-            return;
-        }
 
-        // Use apiV1 port for health checks (create temporary endpoint with apiV1 port only)
-        int healthCheckPort = backendConfig.getPorts().getApiV1();
-
-        for (Endpoint endpoint : endpoints) {
-            // Create a temporary endpoint with only the health check port
-            Endpoint healthEndpoint = new Endpoint(
-                    endpoint.getHost(),
-                    healthCheckPort,
-                    healthCheckPort,
-                    healthCheckPort,
-                    endpoint.getPriority()
-            );
-
-            startChecking(healthEndpoint, probeConfig);
-            log.info("Started health check for {} using apiV1 port {}",
-                    endpoint.getHost(), healthCheckPort);
+            // Start health checks for each endpoint
+            // Note: Endpoint objects should be from registry
+            for (Endpoint endpoint : backend.getEndpoints()) {
+                startChecking(endpoint, probeConfig);
+                log.info("Started health check for {} using apiV1 port {}",
+                        endpoint.getHost(), endpoint.getApiV1Port());
+            }
         }
     }
 
     /**
      * Start health checking for an endpoint
+     * Updates the endpoint's health status directly in the cache
      */
     public void startChecking(Endpoint endpoint, HealthProbeConfig config) {
         HealthCheckTask existingTask = tasks.get(endpoint);
@@ -105,22 +99,10 @@ public class HealthCheckManager {
      */
     public void stopAll() {
         log.info("Stopping all health checks");
-        for (Map.Entry<Endpoint, HealthCheckTask> entry : tasks.entrySet()) {
-            entry.getValue().stop();
+        HashSet<Endpoint> removeSet = new HashSet<>(tasks.keySet());
+        for (Endpoint endpoint : removeSet) {
+            stopChecking(endpoint);
         }
-        tasks.clear();
-    }
-
-    /**
-     * Check if an endpoint is healthy
-     */
-    public boolean isHealthy(Endpoint endpoint) {
-        HealthCheckTask task = tasks.get(endpoint);
-        if (task == null) {
-            // No health check configured, assume healthy
-            return endpoint.isHealthy();
-        }
-        return task.isHealthy();
     }
 
     /**

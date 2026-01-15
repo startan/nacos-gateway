@@ -2,7 +2,9 @@ package pans.gateway.route;
 
 import pans.gateway.config.RouteConfig;
 
-import java.util.UUID;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Route entity
@@ -15,6 +17,22 @@ public class Route {
     public Route(RouteConfig config) {
         this.hostPattern = config.getHost();
         this.backendName = config.getBackend();
+    }
+
+    /**
+     * Static factory method to build a map of routes from route configurations
+     * @param routeConfigs List of route configurations
+     * @return Map of route ID to Route
+     */
+    public static Map<String, Route> from(List<RouteConfig> routeConfigs) {
+        Map<String, Route> routesMap = new ConcurrentHashMap<>();
+        if (routeConfigs != null) {
+            for (RouteConfig config : routeConfigs) {
+                Route route = new Route(config);
+                routesMap.put(route.getId(), route);
+            }
+        }
+        return routesMap;
     }
 
     public String getId() {

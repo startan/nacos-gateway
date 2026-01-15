@@ -24,7 +24,6 @@ public class HealthCheckTask {
     private final Vertx vertx;
     private final Endpoint endpoint;
     private final HealthProbeConfig config;
-    private final AtomicBoolean healthy;
     private final AtomicInteger consecutiveSuccesses;
     private final AtomicInteger consecutiveFailures;
     private final TcpHealthChecker tcpHealthChecker;
@@ -34,7 +33,6 @@ public class HealthCheckTask {
         this.vertx = vertx;
         this.endpoint = endpoint;
         this.config = config;
-        this.healthy = new AtomicBoolean(true); // Start with healthy
         this.consecutiveSuccesses = new AtomicInteger(0);
         this.consecutiveFailures = new AtomicInteger(0);
         this.tcpHealthChecker = new TcpHealthChecker(vertx, endpoint, config);
@@ -55,18 +53,7 @@ public class HealthCheckTask {
         }
     }
 
-    public boolean isHealthy() {
-        return healthy.get();
-    }
-
-    private void checkHealth(long id) {
-        // Check if health check is enabled
-        if (!config.isEnabled()) {
-            // If disabled, mark as healthy and return
-            healthy.set(true);
-            return;
-        }
-
+    private void checkHealth(long timerId) {
         // Check health check type
         if ("tcp".equalsIgnoreCase(config.getType())) {
             // Use TCP health check
@@ -102,7 +89,7 @@ public class HealthCheckTask {
      */
     private void performHttpHealthCheck() {
         HttpClient client = createHttpClient();
-        int port = endpoint.getPort(); // Use apiV1 port for health checks
+        int port = endpoint.getApiV1Port(); // Use apiV1 port for health checks
 
         client.request(HttpMethod.GET, port, endpoint.getHost(), config.getPath())
             .onSuccess(request -> {
@@ -141,27 +128,18 @@ public class HealthCheckTask {
         int successes = consecutiveSuccesses.incrementAndGet();
         consecutiveFailures.set(0);
 
-        if (successes >= config.getSuccessThreshold()) {
-            boolean wasUnhealthy = !healthy.get();
-            healthy.set(true);
-
-            if (wasUnhealthy) {
-                log.info("Endpoint {} is now healthy", endpoint.getAddress());
-            }
+        if (successes >= config.getSuccessThreshold() && !endpoint.isHealthy()) {
+            endpoint.setHealthy(true); // Sync to registry
+            log.info("Endpoint {} is now healthy", endpoint.getAddress());
         }
     }
 
     private void handleFailure() {
         int failures = consecutiveFailures.incrementAndGet();
         consecutiveSuccesses.set(0);
-
-        if (failures >= config.getFailureThreshold()) {
-            boolean wasHealthy = healthy.get();
-            healthy.set(false);
-
-            if (wasHealthy) {
-                log.warn("Endpoint {} is now unhealthy", endpoint.getAddress());
-            }
+        if (failures >= config.getFailureThreshold() && endpoint.isHealthy()) {
+            endpoint.setHealthy(false); // Sync to registry
+            log.warn("Endpoint {} is now unhealthy", endpoint.getAddress());
         }
     }
 

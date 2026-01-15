@@ -20,6 +20,16 @@ public class Endpoint {
     private final AtomicBoolean healthy;
 
     /**
+     * Static factory method to build an Endpoint from configuration
+     * @param config Endpoint configuration
+     * @param ports Port configuration
+     * @return New Endpoint instance
+     */
+    public static Endpoint from(EndpointConfig config, BackendConfig.BackendPortsConfig ports) {
+        return new Endpoint(config, ports);
+    }
+
+    /**
      * Constructor with ports configuration
      * Used when creating Endpoint from configuration
      */
@@ -29,33 +39,6 @@ public class Endpoint {
         this.apiV2Port = ports.getApiV2();
         this.apiConsolePort = ports.getApiConsole();
         this.priority = config.getPriority();
-        this.healthy = new AtomicBoolean(true);
-    }
-
-    /**
-     * Constructor with direct port values
-     * Used when creating temporary endpoint instances
-     */
-    public Endpoint(String host, int apiV1Port, int apiV2Port, int apiConsolePort, int priority) {
-        this.host = host;
-        this.apiV1Port = apiV1Port;
-        this.apiV2Port = apiV2Port;
-        this.apiConsolePort = apiConsolePort;
-        this.priority = priority;
-        this.healthy = new AtomicBoolean(true);
-    }
-
-    /**
-     * Constructor with specific port
-     * Creates an endpoint with all ports set to the same value
-     * Used for health checks or backward compatibility
-     */
-    public Endpoint(String host, int port, int priority) {
-        this.host = host;
-        this.apiV1Port = port;
-        this.apiV2Port = port;
-        this.apiConsolePort = port;
-        this.priority = priority;
         this.healthy = new AtomicBoolean(true);
     }
 
@@ -88,24 +71,6 @@ public class Endpoint {
         };
     }
 
-    /**
-     * Get port for specific port type by config name
-     * @param portType the port type config name (e.g., "apiV1", "apiV2", "apiConsole")
-     * @return the port number
-     */
-    public int getPortForType(String portType) {
-        return getPortForType(PortType.fromConfigName(portType));
-    }
-
-    /**
-     * @deprecated Use {@link #getPortForType(PortType)} instead
-     * Returns the apiV1 port by default
-     */
-    @Deprecated
-    public int getPort() {
-        return apiV1Port;
-    }
-
     public int getPriority() {
         return priority;
     }
@@ -125,15 +90,6 @@ public class Endpoint {
      */
     public String getAddress(PortType portType) {
         return host + ":" + getPortForType(portType);
-    }
-
-    /**
-     * Get address for specific port type by config name
-     * @param portType the port type config name
-     * @return the address in format "host:port"
-     */
-    public String getAddress(String portType) {
-        return getAddress(PortType.fromConfigName(portType));
     }
 
     /**

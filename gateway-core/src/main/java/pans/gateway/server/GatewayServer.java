@@ -52,7 +52,6 @@ public class GatewayServer {
     private final Map<String, Backend> backends;
     private final EndpointSelector endpointSelector;
     private final ConnectionManager connectionManager;
-    private final HealthCheckManager healthCheckManager;
     private final RateLimitManager rateLimitManager;
     private final HealthEndpoint healthEndpoint;
 
@@ -67,7 +66,6 @@ public class GatewayServer {
      * @param backends Shared backends map
      * @param endpointSelector Shared endpoint selector
      * @param connectionManager Shared connection manager
-     * @param healthCheckManager Shared health check manager
      * @param rateLimitManager Shared rate limit manager
      * @param healthEndpoint Shared health endpoint
      */
@@ -81,7 +79,6 @@ public class GatewayServer {
             Map<String, Backend> backends,
             EndpointSelector endpointSelector,
             ConnectionManager connectionManager,
-            HealthCheckManager healthCheckManager,
             RateLimitManager rateLimitManager,
             HealthEndpoint healthEndpoint) {
         this.vertx = vertx;
@@ -93,7 +90,6 @@ public class GatewayServer {
         this.backends = backends;
         this.endpointSelector = endpointSelector;
         this.connectionManager = connectionManager;
-        this.healthCheckManager = healthCheckManager;
         this.rateLimitManager = rateLimitManager;
         this.healthEndpoint = healthEndpoint;
     }
@@ -295,10 +291,6 @@ public class GatewayServer {
 
     public Map<String, Backend> getBackends() {
         return backends;
-    }
-
-    public HealthCheckManager getHealthCheckManager() {
-        return healthCheckManager;
     }
 
     public RateLimitManager getRateLimitManager() {

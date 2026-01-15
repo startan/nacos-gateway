@@ -27,7 +27,7 @@ public class TcpHealthChecker {
      * @return Future&lt;Boolean&gt; true if port is reachable, false otherwise
      */
     public Future<Boolean> check() {
-        return check(endpoint.getPort());
+        return check(endpoint.getApiV1Port());
     }
 
     /**

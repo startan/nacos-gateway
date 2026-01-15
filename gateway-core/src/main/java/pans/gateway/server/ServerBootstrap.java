@@ -37,17 +37,16 @@ public class ServerBootstrap {
         gatewayServerManager = new GatewayServerManager(vertx, config, configPath);
         gatewayServerManager.start();
 
-        // Create config reloader with shared components from GatewayServerManager
+        // Create config reloader with registry and shared components from GatewayServerManager
         ConfigReloader reloader = new ConfigReloader(
                 configLoader,
+                gatewayServerManager.getRegistry(),
                 gatewayServerManager.getConnectionManager(),
-                gatewayServerManager.getHealthCheckManager(),
                 gatewayServerManager.getRateLimitManager()
         );
 
-        // Initialize reloader with current state
-        reloader.setRouteMatcher(gatewayServerManager.getRouteMatcher());
-        reloader.setBackends(gatewayServerManager.getBackends());
+        // Initialize reloader with current config
+        reloader.setCurrentConfig(config);
 
         // Start config watcher
         configWatcher = new ConfigWatcher(vertx, configPath, reloader);

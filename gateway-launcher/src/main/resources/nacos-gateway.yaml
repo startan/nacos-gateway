@@ -30,7 +30,7 @@ backends:
     probe:
       enabled: true                # Enable health check
       type: http                   # Health check type: http/tcp
-      path: /health                # Health check path (HTTP type only)
+      path: /nacos/v1/cs/health    # Health check path (HTTP type only)
       periodSeconds: 10            # Check interval in seconds
       timeoutSeconds: 1            # Check timeout in seconds
       successThreshold: 1          # Success threshold
