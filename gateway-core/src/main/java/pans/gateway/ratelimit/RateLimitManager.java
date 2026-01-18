@@ -65,7 +65,7 @@ public class RateLimitManager {
     public boolean tryAcquire(String backendName, String clientIp) {
         // 1. Check global QPS limit
         if (!globalQpsLimiter.tryAcquire()) {
-            log.debug("Global QPS limit exceeded");
+            log.warn("Global QPS limit exceeded");
             return false;
         }
 
@@ -73,7 +73,7 @@ public class RateLimitManager {
         BackendRateLimiter backendLimiter = backendLimiters.get(backendName);
         if (backendLimiter != null) {
             if (!backendLimiter.tryAcquireQps()) {
-                log.debug("Backend-level QPS limit exceeded for: {}", backendName);
+                log.warn("Backend-level QPS limit exceeded for: {}", backendName);
                 return false;
             }
         }
@@ -81,7 +81,7 @@ public class RateLimitManager {
         // 3. Check client QPS limits
         ClientRateLimiter clientLimiter = getOrCreateClientLimiter(clientIp, backendName);
         if (!clientLimiter.tryAcquireQps()) {
-            log.debug("Client-level QPS limit exceeded for: {}", clientIp);
+            log.warn("Client-level QPS limit exceeded for: {}", clientIp);
             return false;
         }
 
