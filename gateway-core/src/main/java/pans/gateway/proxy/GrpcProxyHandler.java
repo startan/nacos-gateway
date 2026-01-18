@@ -112,13 +112,23 @@ public class GrpcProxyHandler implements ProxyHandler {
         });
 
         proxyResponse.endHandler(v -> {
-            // Copy trailers from proxy response to client response
-            proxyResponse.trailers().forEach(trailer -> {
-                clientResponse.putTrailer(trailer.getKey(), trailer.getValue());
-            });
+            try {
+                // Only end if response hasn't been ended yet
+                if (!clientResponse.ended()) {
+                    // Copy trailers from proxy response to client response
+                    proxyResponse.trailers().forEach(trailer -> {
+                        clientResponse.putTrailer(trailer.getKey(), trailer.getValue());
+                    });
 
-            clientResponse.end();
-            log.debug("gRPC response completed from {}:{}", host, port);
+                    clientResponse.end();
+                    log.debug("gRPC response completed from {}:{}", host, port);
+                } else {
+                    log.debug("gRPC response already ended for {}:{}", host, port);
+                }
+            } catch (Exception e) {
+                // Log warning but don't propagate - stream may already be closed
+                log.warn("Failed to end client response for {}:{}: {}", host, port, e.getMessage());
+            }
         });
 
         proxyResponse.exceptionHandler(t -> {
