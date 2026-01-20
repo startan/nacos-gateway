@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -69,10 +69,7 @@ public class ConfigLoader {
             throw new IOException("Configuration file not found: " + configPath);
         }
 
-        GatewayConfig config = yamlMapper.readValue(configPath.toFile(), GatewayConfig.class);
-
-        // Validate configuration
-        validate(config);
+        GatewayConfig config = load(new FileInputStream(configPath.toFile()));
 
         log.info("Configuration loaded successfully");
         return config;
@@ -83,15 +80,6 @@ public class ConfigLoader {
      */
     public GatewayConfig load(InputStream inputStream) throws IOException {
         GatewayConfig config = yamlMapper.readValue(inputStream, GatewayConfig.class);
-        validate(config);
-        return config;
-    }
-
-    /**
-     * Load configuration from file
-     */
-    public GatewayConfig load(File file) throws IOException {
-        GatewayConfig config = yamlMapper.readValue(file, GatewayConfig.class);
         validate(config);
         return config;
     }
