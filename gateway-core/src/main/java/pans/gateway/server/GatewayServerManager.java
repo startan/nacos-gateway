@@ -79,7 +79,7 @@ public class GatewayServerManager implements EntityChangeListener {
             );
 
             servers.put(portType, server);
-            server.start();
+            server.start(s -> healthCheckManager.startBackendChecking());
 
             log.info("Started {} server on port {}", portType.getDescription(), port);
         }

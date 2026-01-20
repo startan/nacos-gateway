@@ -1,5 +1,6 @@
 package pans.gateway.server;
 
+import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
@@ -14,7 +15,6 @@ import org.slf4j.LoggerFactory;
 import pans.gateway.config.GatewayConfig;
 import pans.gateway.config.PortType;
 import pans.gateway.config.TimeoutConfig;
-import pans.gateway.health.HealthCheckManager;
 import pans.gateway.loadbalance.EndpointSelector;
 import pans.gateway.management.HealthEndpoint;
 import pans.gateway.model.Backend;
@@ -94,7 +94,7 @@ public class GatewayServer {
         this.healthEndpoint = healthEndpoint;
     }
 
-    public void start() {
+    public void start(Handler<HttpServer> handler) {
         log.info("Starting {} server on port {}...", portType.getDescription(), listeningPort);
 
         // Create HTTP server
@@ -106,7 +106,10 @@ public class GatewayServer {
 
         // Start server
         server.listen(listeningPort)
-            .onSuccess(v -> log.info("{} server started on port {}", portType.getDescription(), listeningPort))
+            .onSuccess(v -> {
+                log.info("{} server started on port {}", portType.getDescription(), listeningPort);
+                handler.handle(v);
+            })
             .onFailure(t -> {
                 log.error("Failed to start {} server: {}", portType.getDescription(), t.getMessage());
                 throw new RuntimeException("Failed to start server", t);
