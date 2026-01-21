@@ -11,7 +11,7 @@
     <packaging>pom</packaging>
 
     <name>Nacos Gateway</name>
-    <description>High-performance HTTP/HTTPS/gRPC reverse proxy based on Java + Vert.x</description>
+    <description>基于 Java + Vert.x 的高性能 Nacos 网关，提供负载均衡、动态路由与健康检查功能，用于实现多租户nacos注册中心云服务的关键组件。</description>
 
     <modules>
         <module>gateway-api</module>

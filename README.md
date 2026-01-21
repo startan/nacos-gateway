@@ -1,6 +1,6 @@
 # Nacos Gateway
 
-> 基于 Java + Vert.x 的高性能 HTTP 反向代理网关，支持 HTTP/1、HTTP/2 和 gRPC 代理。
+> 基于 Java + Vert.x 的高性能 Nacos 网关，提供负载均衡、动态路由与健康检查功能，用于实现多租户nacos注册中心云服务的关键组件。
 
 [![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://adoptium.net/)
 [![Vert.x](https://img.shields.io/badge/Vert.x-5.0.6-purple.svg)](https://vertx.io/)
