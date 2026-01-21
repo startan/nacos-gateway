@@ -99,13 +99,13 @@ public class ServerConfig {
      */
     public static class PortsConfig {
         @JsonProperty("apiV1")
-        private int apiV1 = 18848;
+        private int apiV1 = 8848;
 
         @JsonProperty("apiV2")
-        private int apiV2 = 19848;
+        private int apiV2 = 9848;
 
         @JsonProperty("apiConsole")
-        private int apiConsole = 18080;
+        private int apiConsole = 8080;
 
         public int getApiV1() {
             return apiV1;
