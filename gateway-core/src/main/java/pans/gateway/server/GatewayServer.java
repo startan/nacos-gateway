@@ -25,11 +25,10 @@ import pans.gateway.proxy.HttpProxyHandler;
 import pans.gateway.proxy.ProxyConnection;
 import pans.gateway.ratelimit.LimitExceededException;
 import pans.gateway.ratelimit.RateLimitManager;
+import pans.gateway.registry.GatewayRegistry;
 import pans.gateway.route.Route;
-import pans.gateway.route.RouteMatcher;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Gateway server for a specific port type
@@ -41,15 +40,13 @@ public class GatewayServer {
 
     private final Vertx vertx;
     private final GatewayConfig config;
-    private final String configPath;
     private final PortType portType;
     private final int listeningPort;
 
     private HttpServer server;
 
     // Shared components (injected from GatewayServerManager)
-    private final RouteMatcher routeMatcher;
-    private final Map<String, Backend> backends;
+    private final GatewayRegistry registry;
     private final EndpointSelector endpointSelector;
     private final ConnectionManager connectionManager;
     private final RateLimitManager rateLimitManager;
@@ -59,11 +56,9 @@ public class GatewayServer {
      * Constructor for multi-port gateway
      * @param vertx Vert.x instance
      * @param config Gateway configuration
-     * @param configPath Configuration file path
      * @param portType The port type this server handles
      * @param port The port number to listen on
-     * @param routeMatcher Shared route matcher
-     * @param backends Shared backends map
+     * @param registry Shared gateway registry
      * @param endpointSelector Shared endpoint selector
      * @param connectionManager Shared connection manager
      * @param rateLimitManager Shared rate limit manager
@@ -72,22 +67,18 @@ public class GatewayServer {
     public GatewayServer(
             Vertx vertx,
             GatewayConfig config,
-            String configPath,
             PortType portType,
             int port,
-            RouteMatcher routeMatcher,
-            Map<String, Backend> backends,
+            GatewayRegistry registry,
             EndpointSelector endpointSelector,
             ConnectionManager connectionManager,
             RateLimitManager rateLimitManager,
             HealthEndpoint healthEndpoint) {
         this.vertx = vertx;
         this.config = config;
-        this.configPath = configPath;
         this.portType = portType;
         this.listeningPort = port;
-        this.routeMatcher = routeMatcher;
-        this.backends = backends;
+        this.registry = registry;
         this.endpointSelector = endpointSelector;
         this.connectionManager = connectionManager;
         this.rateLimitManager = rateLimitManager;
@@ -186,7 +177,7 @@ public class GatewayServer {
         }
 
         // Match route
-        var routeOpt = routeMatcher.match(hostAndPort.host());
+        var routeOpt = registry.getRouteMatcher().match(hostAndPort.host());
         if (routeOpt.isEmpty()) {
             log.warn("No route matched for host: {}", hostAndPort.host());
             request.response().setStatusCode(404).end("Not Found");
@@ -210,7 +201,7 @@ public class GatewayServer {
             // First request on this connection - perform connection-level initialization
 
             // 1. Select backend and endpoint (load balancing)
-            Backend backend = backends.get(backendName);
+            Backend backend = registry.getBackend(backendName);
             if (backend == null) {
                 log.error("Backend not found: {}", backendName);
                 request.response().setStatusCode(503).end("Service Unavailable - Backend not found");
@@ -286,14 +277,6 @@ public class GatewayServer {
     // Getters for shared components (for compatibility)
     public ConnectionManager getConnectionManager() {
         return connectionManager;
-    }
-
-    public RouteMatcher getRouteMatcher() {
-        return routeMatcher;
-    }
-
-    public Map<String, Backend> getBackends() {
-        return backends;
     }
 
     public RateLimitManager getRateLimitManager() {

@@ -4,6 +4,7 @@ import pans.gateway.config.RouteConfig;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -45,6 +46,20 @@ public class Route {
 
     public String getBackendName() {
         return backendName;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Route route = (Route) o;
+        return Objects.equals(hostPattern, route.hostPattern) &&
+               Objects.equals(backendName, route.backendName);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(hostPattern, backendName);
     }
 
     @Override

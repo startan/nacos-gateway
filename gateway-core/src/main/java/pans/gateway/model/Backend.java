@@ -9,6 +9,7 @@ import pans.gateway.loadbalance.LoadBalancerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -118,6 +119,34 @@ public class Backend {
             throw new IllegalStateException("Backend '" + name + "' does not have port configuration");
         }
         return backendConfig.getPorts().getPortForType(portType.getConfigName());
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Backend backend = (Backend) o;
+        return Objects.equals(name, backend.name) &&
+               Objects.equals(endpoints, backend.endpoints) &&
+               equalsConfig(backendConfig, backend.backendConfig);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(name, endpoints);
+    }
+
+    /**
+     * Compare backend configurations for equality
+     */
+    private boolean equalsConfig(BackendConfig c1, BackendConfig c2) {
+        if (c1 == null && c2 == null) return true;
+        if (c1 == null || c2 == null) return false;
+
+        BackendConfig.BackendPortsConfig ports1 = c1.getPorts();
+        BackendConfig.BackendPortsConfig ports2 = c2.getPorts();
+
+        return Objects.equals(ports1, ports2);
     }
 
     @Override

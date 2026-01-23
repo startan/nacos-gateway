@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pans.gateway.config.GatewayConfig;
 import pans.gateway.config.PortType;
+import pans.gateway.config.event.BackendsUpdatedEvent;
 import pans.gateway.config.event.EntityChangeEvent;
 import pans.gateway.config.event.EntityChangeListener;
 import pans.gateway.config.event.RoutesUpdatedEvent;
@@ -67,11 +68,9 @@ public class GatewayServerManager implements EntityChangeListener {
             GatewayServer server = new GatewayServer(
                 vertx,
                 config,
-                configPath,
                 portType,
                 port,
-                registry.getRouteMatcher(),
-                registry.getBackends(),
+                registry,
                 endpointSelector,
                 connectionManager,
                 rateLimitManager,
@@ -168,13 +167,18 @@ public class GatewayServerManager implements EntityChangeListener {
 
     /**
      * Handle entity change events
-     * Disconnect invalid connections when routes change
+     * Disconnect invalid connections when routes or backends change
      */
     @Override
     public void onEntityChanged(EntityChangeEvent event) {
-        if (event instanceof RoutesUpdatedEvent) {
-            log.info("Routes changed, checking for invalid connections...");
-            connectionManager.disconnectInvalidConnections(registry.getRouteMatcher());
+        if (event instanceof RoutesUpdatedEvent || event instanceof BackendsUpdatedEvent) {
+            log.info("Configuration changed, checking for invalid connections...");
+
+            // Only need new configuration from registry
+            connectionManager.disconnectInvalidConnections(
+                    registry.getRoutes(),
+                    registry.getBackends()
+            );
         }
     }
 

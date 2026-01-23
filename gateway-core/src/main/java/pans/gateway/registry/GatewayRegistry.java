@@ -18,6 +18,7 @@ import pans.gateway.route.RouteMatcherImpl;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
@@ -248,19 +249,17 @@ public class GatewayRegistry {
 
     /**
      * Compare two route maps for equality
+     * Route.equals() compares hostPattern and backendName
      */
     private boolean routesEqual(Map<String, Route> r1, Map<String, Route> r2) {
-        if (r1 == null && r2 == null) return true;
-        if (r1 == null || r2 == null) return false;
-        return r1.size() == r2.size() && r1.keySet().equals(r2.keySet());
+        return Objects.equals(r1, r2);
     }
 
     /**
      * Compare two backend maps for equality
+     * Backend.equals() compares name, endpoints, and ports config
      */
     private boolean backendsEqual(Map<String, Backend> b1, Map<String, Backend> b2) {
-        if (b1 == null && b2 == null) return true;
-        if (b1 == null || b2 == null) return false;
-        return b1.size() == b2.size() && b1.keySet().equals(b2.keySet());
+        return Objects.equals(b1, b2);
     }
 }

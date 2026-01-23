@@ -63,8 +63,8 @@ public class ConfigReloader {
             // Update rate limiters (this part stays as it's not in registry)
             updateRateLimiters(newConfig);
 
-            // Disconnect invalid connections
-            connectionManager.disconnectInvalidConnections(registry.getRouteMatcher());
+            // Note: Connection invalidation is handled by GatewayServerManager
+            // through RoutesUpdatedEvent and BackendsUpdatedEvent
 
             // Update current config
             currentConfig = newConfig;
