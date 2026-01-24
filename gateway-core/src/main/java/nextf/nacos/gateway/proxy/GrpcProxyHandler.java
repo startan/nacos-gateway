@@ -20,16 +20,14 @@ public class GrpcProxyHandler implements ProxyHandler {
     private final HttpClient httpClient;
     private final String host;
     private final int port;
-    private final TimeoutConfig timeoutConfig;
 
     /**
      * Constructor with host and port
      */
-    public GrpcProxyHandler(HttpClient httpClient, String host, int port, TimeoutConfig timeoutConfig) {
+    public GrpcProxyHandler(HttpClient httpClient, String host, int port) {
         this.httpClient = httpClient;
         this.host = host;
         this.port = port;
-        this.timeoutConfig = timeoutConfig;
     }
 
     public static boolean isGrpcRequest(HttpServerRequest request) {

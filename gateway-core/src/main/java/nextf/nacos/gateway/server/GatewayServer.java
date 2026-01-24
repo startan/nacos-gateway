@@ -251,8 +251,7 @@ public class GatewayServer {
                     HttpProxyHandler httpHandler = new HttpProxyHandler(
                             proxyConnection.getHttpClient(),
                             backendHost,
-                            backendPort,
-                            config.getTimeout()
+                            backendPort
                     );
                     httpHandler.handle(request);
                 }
@@ -260,8 +259,7 @@ public class GatewayServer {
                     GrpcProxyHandler grpcHandler = new GrpcProxyHandler(
                             proxyConnection.getHttpClient(),
                             backendHost,
-                            backendPort,
-                            config.getTimeout()
+                            backendPort
                     );
                     grpcHandler.handle(request);
                 }
