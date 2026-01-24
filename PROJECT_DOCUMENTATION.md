@@ -1389,7 +1389,7 @@ mvn clean install
 - 类名：PascalCase（如 `RouteMatcher`）
 - 方法名：camelCase（如 `matchRoute`）
 - 常量：UPPER_SNAKE_CASE（如 `MAX_CONNECTIONS`）
-- 包名：全小写（如 `pans.gateway.config`）
+- 包名：全小写（如 `nextf.nacos.gateway.config`）
 
 **注释规范**
 - 公共 API 必须有 Javadoc
@@ -1473,7 +1473,7 @@ mvn exec:java -Dexec.args="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n
 
 修改 `logback.xml`：
 ```xml
-<logger name="pans.gateway" level="DEBUG"/>
+<logger name="nextf.nacos.gateway" level="DEBUG"/>
 ```
 
 ### 7.5 性能优化

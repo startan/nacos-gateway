@@ -20,7 +20,7 @@
     </appender>
 
     <!-- Gateway Logger -->
-    <logger name="pans.gateway" level="INFO"/>
+    <logger name="nextf.nacos.gateway" level="INFO"/>
 
     <!-- Root Logger -->
     <root level="INFO">

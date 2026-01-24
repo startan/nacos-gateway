@@ -10,28 +10,28 @@ project:
   type: "Java Application"
   build_tool: "Maven"
   jdk_version: "17"
-  root_package: "pans.gateway"
+  root_package: "nextf.nacos.gateway"
 
 modules:
   - name: "gateway-api"
     path: "gateway-api"
-    package: "pans.gateway"
+    package: "nextf.nacos.gateway"
 
   - name: "gateway-core"
     path: "gateway-core"
-    package: "pans.gateway"
+    package: "nextf.nacos.gateway"
     depends_on: ["gateway-api"]
 
   - name: "gateway-launcher"
     path: "gateway-launcher"
-    package: "pans.gateway"
+    package: "nextf.nacos.gateway"
     depends_on: ["gateway-core"]
 ```
 
 ## 模块结构树
 
 ```
-pans.gateway/
+nextf.nacos.gateway/
 ├── config/                          # 配置管理
 │   ├── GatewayConfig                # 根配置类
 │   ├── ServerConfig                 # 服务器配置

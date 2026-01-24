@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>pans.gateway</groupId>
+        <groupId>nextf.nacos.gateway</groupId>
         <artifactId>nacos-gateway</artifactId>
         <version>1.0.0</version>
     </parent>
@@ -20,7 +20,7 @@
     <dependencies>
         <!-- Gateway API -->
         <dependency>
-            <groupId>pans.gateway</groupId>
+            <groupId>nextf.nacos.gateway</groupId>
             <artifactId>gateway-api</artifactId>
             <version>${project.version}</version>
         </dependency>
