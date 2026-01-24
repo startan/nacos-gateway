@@ -16,18 +16,15 @@ public class ConfigReloader {
 
     private final ConfigLoader configLoader;
     private final GatewayRegistry registry;
-    private final ConnectionManager connectionManager;
     private final RateLimitManager rateLimitManager;
 
     private GatewayConfig currentConfig;
 
     public ConfigReloader(ConfigLoader configLoader,
                          GatewayRegistry registry,
-                         ConnectionManager connectionManager,
                          RateLimitManager rateLimitManager) {
         this.configLoader = configLoader;
         this.registry = registry;
-        this.connectionManager = connectionManager;
         this.rateLimitManager = rateLimitManager;
     }
 

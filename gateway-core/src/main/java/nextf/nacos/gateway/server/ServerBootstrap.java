@@ -34,14 +34,13 @@ public class ServerBootstrap {
         vertx = Vertx.vertx();
 
         // Create and start gateway server manager (manages multiple servers)
-        gatewayServerManager = new GatewayServerManager(vertx, config, configPath);
+        gatewayServerManager = new GatewayServerManager(vertx, config);
         gatewayServerManager.start();
 
         // Create config reloader with registry and shared components from GatewayServerManager
         ConfigReloader reloader = new ConfigReloader(
                 configLoader,
                 gatewayServerManager.getRegistry(),
-                gatewayServerManager.getConnectionManager(),
                 gatewayServerManager.getRateLimitManager()
         );
 

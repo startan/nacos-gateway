@@ -31,8 +31,6 @@ public class GatewayServerManager implements EntityChangeListener {
 
     private final Vertx vertx;
     private final GatewayConfig config;
-    private final String configPath;
-
     // One server per port type
     private final Map<PortType, GatewayServer> servers = new ConcurrentHashMap<>();
 
@@ -44,10 +42,9 @@ public class GatewayServerManager implements EntityChangeListener {
     private RateLimitManager rateLimitManager;
     private HealthEndpoint healthEndpoint;
 
-    public GatewayServerManager(Vertx vertx, GatewayConfig config, String configPath) {
+    public GatewayServerManager(Vertx vertx, GatewayConfig config) {
         this.vertx = vertx;
         this.config = config;
-        this.configPath = configPath;
     }
 
     /**
