@@ -29,6 +29,9 @@ public class RateLimitManager {
     // Client-level limiters (identified by client IP)
     private final Map<String, ClientRateLimiter> clientLimiters = new ConcurrentHashMap<>();
 
+    // Backend client rate limit configurations (for overriding server defaults)
+    private final Map<String, BackendConfig.BackendRateLimitConfig> backendRateLimitConfigs = new ConcurrentHashMap<>();
+
     // Server-level configuration
     private final ServerConfig.ServerRateLimitConfig serverRateLimitConfig;
 
@@ -97,7 +100,7 @@ public class RateLimitManager {
     public boolean tryAcquireConnection(String backendName, String clientIp) {
         // 1. Check global connection limit
         if (!globalConnectionLimiter.tryAcquire()) {
-            log.debug("Global connection limit exceeded");
+            log.warn("Global connection limit exceeded");
             return false;
         }
 
@@ -105,7 +108,7 @@ public class RateLimitManager {
         BackendRateLimiter backendLimiter = backendLimiters.get(backendName);
         if (backendLimiter != null) {
             if (!backendLimiter.tryAcquireConnection()) {
-                log.debug("Backend-level connection limit exceeded for: {}", backendName);
+                log.warn("Backend-level connection limit exceeded for: {}", backendName);
                 globalConnectionLimiter.release();
                 return false;
             }
@@ -114,7 +117,7 @@ public class RateLimitManager {
         // 3. Check client connection limits
         ClientRateLimiter clientLimiter = getOrCreateClientLimiter(clientIp, backendName);
         if (!clientLimiter.tryAcquireConnection()) {
-            log.debug("Client-level connection limit exceeded for: {}", clientIp);
+            log.warn("Client-level connection limit exceeded for: {}", clientIp);
             globalConnectionLimiter.release();
             if (backendLimiter != null) {
                 backendLimiter.release();
@@ -140,10 +143,16 @@ public class RateLimitManager {
             backendLimiter.release();
         }
 
-        // Release client connection permit
+        // Release client connection permit and cleanup if no active connections
         ClientRateLimiter clientLimiter = clientLimiters.get(clientIp);
         if (clientLimiter != null) {
             clientLimiter.release();
+
+            // Clean up client limiter if all connections are closed
+            if (clientLimiter.getCurrentConnections() == 0) {
+                clientLimiters.remove(clientIp);
+                log.debug("Removed client rate limiter for {} (no active connections)", clientIp);
+            }
         }
     }
 
@@ -153,20 +162,23 @@ public class RateLimitManager {
      */
     private ClientRateLimiter getOrCreateClientLimiter(String clientIp, String backendName) {
         return clientLimiters.computeIfAbsent(clientIp, ip -> {
-            // Check if backend has custom client limits
-            BackendRateLimiter backendLimiter = backendLimiters.get(backendName);
-            BackendConfig.BackendRateLimitConfig backendRateLimit = null;
-
-            // Try to get rate limit config from backend
-            // Note: We'll need to store backend config references or pass them differently
-            // For now, use server defaults
-
+            // Start with server-level defaults
             int maxQps = serverRateLimitConfig.getMaxQpsPerClient();
             int maxConns = serverRateLimitConfig.getMaxConnectionsPerClient();
 
-            // TODO: Apply backend override if available
-            // This would require storing BackendConfig references in BackendRateLimiter
-            // or a different approach to look up backend config
+            // Backend config overrides server config (if configured)
+            BackendConfig.BackendRateLimitConfig backendRateLimit = backendRateLimitConfigs.get(backendName);
+            if (backendRateLimit != null) {
+                // Only override if backend has configured these values (non-zero)
+                if (backendRateLimit.getMaxQpsPerClient() > 0) {
+                    maxQps = backendRateLimit.getMaxQpsPerClient();
+                }
+                if (backendRateLimit.getMaxConnectionsPerClient() > 0) {
+                    maxConns = backendRateLimit.getMaxConnectionsPerClient();
+                }
+                log.debug("Using backend override for client {}: QPS={}, Connections={}",
+                        ip, maxQps, maxConns);
+            }
 
             return new ClientRateLimiter(ip, maxQps, maxConns);
         });
@@ -178,14 +190,20 @@ public class RateLimitManager {
     public void updateBackendLimiter(String backendName, BackendConfig backendConfig) {
         BackendConfig.BackendRateLimitConfig rateLimit = backendConfig.getRateLimit();
         if (rateLimit != null) {
+            // Update backend-level rate limiter
             BackendRateLimiter limiter = new BackendRateLimiter(
                     backendName,
                     rateLimit.getMaxQps(),
                     rateLimit.getMaxConnections()
             );
             backendLimiters.put(backendName, limiter);
-            log.info("Updated backend rate limiter for {}: QPS={}, Connections={}",
-                    backendName, rateLimit.getMaxQps(), rateLimit.getMaxConnections());
+
+            // Store backend rate limit config for client limiter creation
+            backendRateLimitConfigs.put(backendName, rateLimit);
+
+            log.info("Updated backend rate limiter for {}: QPS={}, Connections={}, ClientQPS={}, ClientConns={}",
+                    backendName, rateLimit.getMaxQps(), rateLimit.getMaxConnections(),
+                    rateLimit.getMaxQpsPerClient(), rateLimit.getMaxConnectionsPerClient());
         }
     }
 }
