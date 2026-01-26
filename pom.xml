@@ -13,6 +13,14 @@
     <name>Nacos Gateway</name>
     <description>基于 Java + Vert.x 的高性能 Nacos 网关，提供负载均衡、动态路由与健康检查功能，用于实现多租户nacos注册中心云服务的关键组件。</description>
 
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <modules>
         <module>gateway-api</module>
         <module>gateway-core</module>
