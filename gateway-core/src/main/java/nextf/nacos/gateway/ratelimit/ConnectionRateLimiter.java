@@ -51,6 +51,14 @@ public class ConnectionRateLimiter implements RateLimiter {
         return currentConnections.get();
     }
 
+    /**
+     * Set current connection count (used for hot reload to preserve state)
+     * @param count the connection count to set
+     */
+    public void setCurrentConnections(int count) {
+        currentConnections.set(count);
+    }
+
     public int getMaxConnections() {
         return maxConnections;
     }

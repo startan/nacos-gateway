@@ -97,14 +97,25 @@ public class ConfigReloader {
      * This stays in ConfigReloader as it's not managed by the registry
      */
     private void updateRateLimiters(GatewayConfig newConfig) {
-        // Update backend rate limiters
+        boolean updated = false;
+        // 1. Update server-level rate limit config (hot reload support)
+        if (newConfig.getServer() != null && newConfig.getServer().getRateLimit() != null) {
+            rateLimitManager.updateServerRateLimitConfig(newConfig.getServer().getRateLimit());
+            updated = true;
+        }
+
+        // 2. Update backend rate limiters
         if (newConfig.getBackends() != null) {
             for (BackendConfig backendConfig : newConfig.getBackends()) {
                 rateLimitManager.updateBackendLimiter(backendConfig.getName(), backendConfig);
             }
+            updated = true;
         }
 
-        log.info("Updated rate limiters");
+        if (updated) {
+            rateLimitManager.clearClientLimiters();
+        }
+        log.info("Updated rate limiters (server and backend level)");
     }
 
     public GatewayConfig getCurrentConfig() {
