@@ -41,6 +41,7 @@
 | Logback | 1.4.11 | 日志框架 |
 | SLF4J | 2.0.9 | 日志门面 |
 | Maven | 3.6+ | 构建工具 |
+| Nacos Client | 2.3.2 | 配置中心集成 |
 
 ### 1.4 项目结构
 
@@ -65,6 +66,9 @@ nacos-gateway-java/
         ├── config.yaml              # 默认配置
         └── logback.xml              # 日志配置
 ```
+
+**config 包说明**：
+- `reader/` - 配置读取器（支持多协议：file://、classpath://、nacos://）
 
 ---
 
@@ -175,10 +179,19 @@ nacos-gateway-java/
 
 #### 2.1.7 配置热更新
 
-**需求描述**: 网关应支持配置文件热更新，无需重启服务。
+**需求描述**: 网关应支持从多种来源加载配置，并支持配置文件热更新。
 
 **详细说明**:
-- 监听配置文件修改（轮询方式，兼容 Windows）
+- **配置来源**:
+  - 本地文件系统（file://）
+  - 应用类路径（classpath://）
+  - Nacos 配置中心（nacos://）
+- **热更新机制**:
+  - 文件系统：轮询文件修改时间（兼容 Windows）
+  - Nacos 配置中心：实时推送（基于 gRPC 长连接）
+  - 类路径资源：不支持热更新（通常打包在 jar 中）
+- **协议识别**: 通过配置路径的协议前缀自动识别
+- **向后兼容**: 未指定协议时默认使用 file://
 - 配置变化时自动重新加载
 - 路由变化时立即断开不符合新路由的连接
 - 后端变化时更新健康检查
@@ -188,6 +201,7 @@ nacos-gateway-java/
 - 配置修改自动生效
 - 不符合新路由的连接被断开
 - 配置错误不影响当前运行
+- 三种协议都能正常工作
 
 #### 2.1.8 管理接口
 
@@ -314,6 +328,54 @@ nacos-gateway-java/
 
 #### 3.2.2 配置热更新流程
 
+**配置加载流程（新架构）**:
+```
+1. ServerBootstrap 启动
+   └─ ConfigFileReaderFactory.getReader(configPath, vertx)
+      └─ 根据协议前缀创建对应 Reader：
+         ├─ file:// → FileConfigReader
+         ├─ classpath:// → ClasspathConfigReader
+         └─ nacos:// → NacosConfigReader
+
+2. 读取配置内容
+   └─ ConfigFileReader.readConfig()
+      ├─ 文件系统：Files.readString()
+      ├─ 类路径：getResourceAsStream()
+      └─ Nacos：ConfigService.getConfig()
+
+3. 解析和验证
+   └─ ConfigLoader.loadFromString(configContent)
+      ├─ yamlMapper.readValue() 解析 YAML
+      └─ validate() 验证配置
+
+4. 创建组件并启动服务
+   └─ GatewayServerManager、ConfigReloader、ConfigWatcher
+
+5. 启动配置监听（如果支持）
+   └─ ConfigFileReader.watchConfig(callback)
+      ├─ 文件系统：Vertx 定时器轮询
+      ├─ 类路径：空实现
+      └─ Nacos：ConfigService.addListener()
+```
+
+**配置变更流程（新架构）**:
+```
+1. 配置变更检测
+   ├─ 文件系统：文件修改时间变化
+   ├─ Nacos：Listener.receiveConfigInfo() 回调
+   └─ 类路径：不支持
+
+2. 触发回调
+   └─ ConfigWatcher 注册的 callback
+      └─ ConfigReloader.reload()
+
+3. 重新加载
+   ├─ ConfigFileReader.readConfig() 读取最新配置
+   ├─ ConfigLoader.loadFromString() 解析
+   └─ 更新各个组件（路由、后端、限流器等）
+```
+
+**原流程（已废弃）**:
 ```
 1. 文件监听
    └─ ConfigWatcher 每秒检查配置文件修改时间
@@ -454,6 +516,41 @@ EndpointConfig
     ├── host (String)
     ├── port (int)
     └── priority (int)
+
+配置读取器（新增）
+├── ConfigFileReader (interface)
+│   ├── readConfig(): String
+│   ├── watchConfig(Runnable callback)
+│   ├── stopWatching()
+│   └── getSourceDescription(): String
+│           │
+│           ├── FileConfigReader
+│           │   ├── Vertx vertx
+│           │   ├── Path configPath
+│           │   ├── AtomicLong lastModified
+│           │   └── long timerId
+│           │
+│           ├── ClasspathConfigReader
+│           │   ├── String resourcePath
+│           │   └── ClassLoader classLoader
+│           │
+│           └── NacosConfigReader
+│               ├── NacosUrlConfig urlConfig
+│               ├── ConfigService configService
+│               ├── AtomicBoolean isWatching
+│               └── volatile String currentConfig
+│
+├── ConfigFileReaderFactory
+│   └── getReader(configPath, vertx): ConfigFileReader
+│
+├── NacosUrlConfig
+│   ├── dataId, group, namespace, serverAddr
+│   ├── authMode, accessKey, secretKey
+│   ├── username, password
+│   └── getProperties(): Properties
+│
+└── NacosUrlParser
+    └── parse(urlString): NacosUrlConfig
 ```
 
 #### 4.1.2 关键类说明

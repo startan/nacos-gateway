@@ -7,6 +7,8 @@ import nextf.nacos.gateway.config.ConfigLoader;
 import nextf.nacos.gateway.config.ConfigReloader;
 import nextf.nacos.gateway.config.ConfigWatcher;
 import nextf.nacos.gateway.config.GatewayConfig;
+import nextf.nacos.gateway.config.reader.ConfigFileReader;
+import nextf.nacos.gateway.config.reader.ConfigFileReaderFactory;
 
 /**
  * Server bootstrap
@@ -26,29 +28,36 @@ public class ServerBootstrap {
     }
 
     public void start() throws Exception {
-        // Load configuration
-        ConfigLoader configLoader = new ConfigLoader();
-        GatewayConfig config = configLoader.load(configPath);
-
-        // Create Vert.x instance
+        // 1. 创建 Vert.x 实例（FileConfigReader 需要 Vertx 来设置定时器）
         vertx = Vertx.vertx();
 
-        // Create and start gateway server manager (manages multiple servers)
+        // 2. 创建 ConfigFileReader
+        ConfigFileReader configFileReader = ConfigFileReaderFactory.getReader(configPath, vertx);
+
+        // 3. 读取配置内容
+        String configContent = configFileReader.readConfig();
+
+        // 4. 解析配置
+        ConfigLoader configLoader = new ConfigLoader();
+        GatewayConfig config = configLoader.loadFromString(configContent);
+
+        // 5. 创建并启动网关服务器管理器
         gatewayServerManager = new GatewayServerManager(vertx, config);
         gatewayServerManager.start();
 
-        // Create config reloader with registry and shared components from GatewayServerManager
+        // 6. 创建 ConfigReloader（传入 ConfigFileReader）
         ConfigReloader reloader = new ConfigReloader(
                 configLoader,
                 gatewayServerManager.getRegistry(),
-                gatewayServerManager.getRateLimitManager()
+                gatewayServerManager.getRateLimitManager(),
+                configFileReader  // 新增参数
         );
 
-        // Initialize reloader with current config
+        // 7. 初始化 reloader 并设置当前配置
         reloader.setCurrentConfig(config);
 
-        // Start config watcher
-        configWatcher = new ConfigWatcher(vertx, configPath, reloader);
+        // 8. 创建并启动 ConfigWatcher（传入 ConfigFileReader 和 ConfigReloader）
+        configWatcher = new ConfigWatcher(configFileReader, reloader);
         configWatcher.start();
 
         log.info("=================================================");

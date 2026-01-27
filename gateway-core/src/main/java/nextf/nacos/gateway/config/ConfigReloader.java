@@ -2,13 +2,14 @@ package nextf.nacos.gateway.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import nextf.nacos.gateway.config.reader.ConfigFileReader;
 import nextf.nacos.gateway.proxy.ConnectionManager;
 import nextf.nacos.gateway.ratelimit.RateLimitManager;
 import nextf.nacos.gateway.registry.GatewayRegistry;
 
 /**
  * Configuration reloader for hot reloading
- * Now acts as a notifier only - delegates all building logic to GatewayRegistry
+ * 职责：协调 ConfigFileReader 和 ConfigLoader，完成配置热加载
  */
 public class ConfigReloader {
 
@@ -17,15 +18,18 @@ public class ConfigReloader {
     private final ConfigLoader configLoader;
     private final GatewayRegistry registry;
     private final RateLimitManager rateLimitManager;
+    private final ConfigFileReader configFileReader;
 
     private GatewayConfig currentConfig;
 
     public ConfigReloader(ConfigLoader configLoader,
                          GatewayRegistry registry,
-                         RateLimitManager rateLimitManager) {
+                         RateLimitManager rateLimitManager,
+                         ConfigFileReader configFileReader) {
         this.configLoader = configLoader;
         this.registry = registry;
         this.rateLimitManager = rateLimitManager;
+        this.configFileReader = configFileReader;
     }
 
     public void setCurrentConfig(GatewayConfig config) {
@@ -33,37 +37,37 @@ public class ConfigReloader {
     }
 
     /**
-     * Reload configuration from file
-     * Delegates to GatewayRegistry for atomic update
+     * 重新加载配置（无入参，通过 ConfigFileReader 读取）
      */
-    public void reload(String configPath) {
+    public synchronized void reload() {
         try {
-            // Load new configuration
-            GatewayConfig newConfig = configLoader.load(configPath);
-            log.info("New configuration loaded successfully");
+            // 1. 通过 ConfigFileReader 读取最新配置内容
+            String configContent = configFileReader.readConfig();
+            log.info("Configuration content read from: {}", configFileReader.getSourceDescription());
 
-            // Check if ports changed - requires restart
+            // 2. 通过 ConfigLoader 解析和验证配置
+            GatewayConfig newConfig = configLoader.loadFromString(configContent);
+            log.info("New configuration parsed and validated successfully");
+
+            // 3. 检查端口是否变化（需要重启）
             if (hasPortsChanged(newConfig)) {
                 log.warn("Port configuration changed - requires restart for changes to take effect");
             }
 
-            // Update routes via registry
+            // 4. 更新路由
             if (newConfig.getRoutes() != null) {
                 registry.updateRoutes(newConfig.getRoutes());
             }
 
-            // Update backends via registry
+            // 5. 更新后端
             if (newConfig.getBackends() != null) {
                 registry.updateBackends(newConfig.getBackends());
             }
 
-            // Update rate limiters (this part stays as it's not in registry)
+            // 6. 更新限流配置
             updateRateLimiters(newConfig);
 
-            // Note: Connection invalidation is handled by GatewayServerManager
-            // through RoutesUpdatedEvent and BackendsUpdatedEvent
-
-            // Update current config
+            // 7. 更新当前配置
             currentConfig = newConfig;
 
             log.info("Configuration reloaded successfully");

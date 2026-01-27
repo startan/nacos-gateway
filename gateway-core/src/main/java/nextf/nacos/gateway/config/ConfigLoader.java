@@ -6,18 +6,15 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * Configuration loader for loading and validating gateway configuration
+ * Configuration loader for validating and parsing gateway configuration
+ * 职责：验证配置合法性、反序列化为配置对象
+ * 不再负责从文件/网络读取配置内容
  */
 public class ConfigLoader {
 
@@ -36,51 +33,19 @@ public class ConfigLoader {
     }
 
     /**
-     * Load configuration from file path
-     * First attempts to load from file system, then falls back to classpath
+     * 从配置内容字符串加载配置
+     * @param configContent 配置内容的字符串形式（YAML格式）
+     * @return GatewayConfig对象
      */
-    public GatewayConfig load(String configPath) throws IOException {
-        log.info("Loading configuration from: {}", configPath);
-
-        // Try file system first
-        Path path = Paths.get(configPath);
-        if (Files.exists(path)) {
-            log.info("Loading configuration from file system: {}", path);
-            return load(path);
+    public GatewayConfig loadFromString(String configContent) throws IOException {
+        if (configContent == null || configContent.isEmpty()) {
+            throw new IOException("Configuration content is null or empty");
         }
 
-        // Fall back to classpath
-        log.info("Configuration not found in file system, trying classpath: {}", configPath);
-        try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream(configPath)) {
-            if (inputStream == null) {
-                throw new IOException("Configuration file not found in file system or classpath: " + configPath);
-            }
-            return load(inputStream);
-        }
-    }
-
-    /**
-     * Load configuration from path
-     */
-    public GatewayConfig load(Path configPath) throws IOException {
-        log.info("Loading configuration from: {}", configPath);
-
-        if (!Files.exists(configPath)) {
-            throw new IOException("Configuration file not found: " + configPath);
-        }
-
-        GatewayConfig config = load(new FileInputStream(configPath.toFile()));
-
-        log.info("Configuration loaded successfully");
-        return config;
-    }
-
-    /**
-     * Load configuration from input stream
-     */
-    public GatewayConfig load(InputStream inputStream) throws IOException {
-        GatewayConfig config = yamlMapper.readValue(inputStream, GatewayConfig.class);
+        GatewayConfig config = yamlMapper.readValue(configContent, GatewayConfig.class);
         validate(config);
+
+        log.info("Configuration loaded and validated successfully");
         return config;
     }
 

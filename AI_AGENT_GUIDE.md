@@ -45,7 +45,15 @@ nextf.nacos.gateway/
 │   ├── ManagementConfig             # 管理接口配置
 │   ├── ConfigLoader                 # 配置加载器
 │   ├── ConfigWatcher                # 配置文件监听器
-│   └── ConfigReloader               # 配置热更新器
+│   ├── ConfigReloader               # 配置热更新器
+│   └── reader/                      # 配置读取器包（新增）
+│       ├── ConfigFileReader         # 配置读取器接口
+│       ├── FileConfigReader         # 文件系统读取器
+│       ├── ClasspathConfigReader    # 类路径读取器
+│       ├── NacosConfigReader        # Nacos 配置中心读取器
+│       ├── ConfigFileReaderFactory  # 读取器工厂类
+│       ├── NacosUrlConfig           # Nacos URL 配置
+│       └── NacosUrlParser           # Nacos URL 解析器
 │
 ├── route/                           # 路由匹配
 │   ├── Route (interface)            # 路由实体
@@ -117,22 +125,20 @@ nextf.nacos.gateway/
        │ creates
        ▼
 ┌─────────────────────────────┐
-│   GatewayServer             │  网关服务器核心
-├─────────────────────────────┤
-│ - RouteMatcher              │  路由匹配
-│ - LoadBalancer              │  负载均衡
-│ - HealthCheckManager        │  健康检查
-│ - RateLimitManager          │  限流
-│ - ConnectionManager         │  连接管理
-└─────────────────────────────┘
-       │
-       │ uses
-       ▼
+│   ConfigFileReaderFactory  │  配置读取器工厂
+│   - 根据协议创建 Reader    │
+└────────────┬────────────────┘
+             │
+             ├──→ FileConfigReader
+             ├──→ ClasspathConfigReader
+             └──→ NacosConfigReader
+                    │
+                    ▼
 ┌─────────────────────────────┐
 │   Config Module             │  配置管理
 ├─────────────────────────────┤
-│ ConfigLoader                │  加载 YAML
-│ ConfigWatcher               │  监听文件变化
+│ ConfigLoader                │  验证和反序列化
+│ ConfigWatcher               │  通过 Reader 监听
 │ ConfigReloader              │  热更新
 └─────────────────────────────┘
 ```
@@ -182,6 +188,30 @@ RouteMatcher → RateLimitManager → LoadBalancer → ProxyHandler
 **位置**: Vert.x 实例管理
 
 **实现**: 通过 `ServerBootstrap` 管理
+
+### 5. 工厂模式 (Factory Pattern)
+
+**位置**: `config/reader` 包
+
+**接口**: `ConfigFileReader`
+
+**实现类**:
+- `FileConfigReader`
+- `ClasspathConfigReader`
+- `NacosConfigReader`
+
+**工厂**: `ConfigFileReaderFactory.getReader(String configPath, Vertx vertx)`
+
+**使用方式**:
+```java
+ConfigFileReader reader = ConfigFileReaderFactory.getReader("nacos://config?...", vertx);
+String config = reader.readConfig();
+```
+
+**特点**:
+- 通过协议前缀自动识别 Reader 类型
+- 向后兼容：未指定协议时默认使用 file://
+- 支持热更新监听机制
 
 ## 核心流程算法
 
@@ -425,6 +455,42 @@ if (newEndpoint.matches(path)) {
     return;
 }
 ```
+
+### 添加新的配置读取协议
+
+1. 在 `config/reader` 包创建新类：
+```java
+public class NewProtocolConfigReader implements ConfigFileReader {
+    @Override
+    public String readConfig() throws IOException {
+        // 实现读取逻辑
+    }
+
+    @Override
+    public void watchConfig(Runnable callback) {
+        // 实现监听逻辑
+    }
+
+    @Override
+    public void stopWatching() {
+        // 停止监听
+    }
+
+    @Override
+    public String getSourceDescription() {
+        return "new-protocol://...";
+    }
+}
+```
+
+2. 在 `ConfigFileReaderFactory` 添加分支：
+```java
+else if (configPath.startsWith("new-protocol://")) {
+    return new NewProtocolConfigReader(configPath);
+}
+```
+
+3. 更新配置文档和示例
 
 ### 修改配置结构
 

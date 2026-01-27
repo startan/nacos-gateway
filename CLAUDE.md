@@ -14,6 +14,14 @@
 - **健康检查**: 支持http/1和http/2请求后端实现健康检查，响应status为2xx即为健康
 - **连接管理**: 采用连接级别资源管理架构，每个客户端连接对应一个专属的 ProxyConnection，内部管理专属 HttpClient、Endpoint 和 Backend。客户端断开时自动清理后端资源，有效防止连接泄漏
 
+## 配置读取模式
+- **多协议支持**:
+  - `file://` - 本地文件系统读取（默认，支持热更新）
+  - `classpath://` - 类路径读取（不支持热更新）
+  - `nacos://` - Nacos 配置中心读取（支持实时推送更新）
+- **向后兼容**: 未指定协议时默认使用 file://
+- **灵活配置**: 通过 URL 参数配置 Nacos 认证信息
+
 ## 架构
 
 ```
@@ -30,6 +38,46 @@
 
 ## 配置
 配置文件路径默认为classpath下的 `nacos-gateway.yaml`或`nacos-gateway.yml`，您可以在启动时通过命令行参数`-c path/to/config.yaml`指定自定义配置文件位置。
+
+### 配置文件路径协议
+
+配置文件路径支持三种协议，通过协议前缀自动识别：
+
+1. **file:// 协议**（默认）
+   - 从本地文件系统读取配置
+   - 支持文件变更监听和热更新
+   - 示例：
+     ```bash
+     java -jar nacos-gateway.jar -c nacos-gateway.yaml
+     java -jar nacos-gateway.jar -c file:///etc/nacos-gateway/config.yaml
+     ```
+
+2. **classpath:// 协议**
+   - 从应用类路径读取配置
+   - 不支持热更新（资源通常打包在 jar 中）
+   - 示例：
+     ```bash
+     java -jar nacos-gateway.jar -c classpath://nacos-gateway.yaml
+     ```
+
+3. **nacos:// 协议**
+   - 从 Nacos 配置中心读取配置
+   - 支持实时推送更新（基于 gRPC 长连接）
+   - 支持两种认证模式：
+     - AK/SK 模式：`auth-mode=ak/sk&accessKey=<key>&secretKey=<secret>`
+     - 用户名/密码模式：`auth-mode=username/password&username=<user>&password=<pass>`
+   - URL 格式：
+     ```
+     nacos://<dataId>?group=<group>&namespace=<namespace>&serverAddr=<addr1>,<addr2>&auth-mode=<mode>&...
+     ```
+   - 示例：
+     ```bash
+     # AK/SK 认证
+     java -jar nacos-gateway.jar -c "nacos://nacos-gateway.yaml?group=gateway-group&namespace=dev&serverAddr=127.0.0.1:8848&auth-mode=ak/sk&accessKey=yourKey&secretKey=yourSecret"
+
+     # 用户名/密码认证
+     java -jar nacos-gateway.jar -c "nacos://nacos-gateway.yaml?group=gateway-group&namespace=prod&serverAddr=192.168.1.100:8848,192.168.1.101:8848&auth-mode=username/password&username=nacos&password=nacos"
+     ```
 
 ### 配置文件结构
 ```yaml
@@ -97,3 +145,4 @@ backends:
 - Jackson
 - Logback
 - SLF4J
+- Nacos Client 2.3.2（配置中心集成）

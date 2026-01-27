@@ -15,6 +15,7 @@
 - **健康检查**: HTTP/1 和 HTTP/2 探针，连续阈值机制
 - **限流保护**: QPS + 并发连接数限流，全局+路由级
 - **配置热更新**: 文件监听实现配置动态加载，无需重启
+- **配置中心集成**: 支持 Nacos 配置中心，配置变更实时推送
 - **连接管理**: 每个客户端连接对应一个专属后端连接，客户端断开自动清理后端资源，防止连接泄漏
 
 ## 快速开始
@@ -35,11 +36,17 @@ mvn clean install
 ### 运行
 
 ```bash
-# 使用默认配置
+# 使用默认配置（file:// 协议）
 java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar
 
-# 使用自定义配置
+# 使用自定义配置文件（file:// 协议）
 java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar /path/to/config.yaml
+
+# 使用类路径配置（classpath:// 协议）
+java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar classpath://config.yaml
+
+# 使用 Nacos 配置中心（nacos:// 协议）
+java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml?group=gateway&serverAddr=127.0.0.1:8848&auth-mode=ak/sk&accessKey=yourKey&secretKey=yourSecret"
 ```
 
 ### 配置示例
@@ -93,6 +100,16 @@ backends:
 - 先检查全局，再检查路由级
 - 超限返回 HTTP 429
 
+### 配置文件路径协议
+
+支持三种配置读取协议：
+
+- **file://** - 本地文件（默认，支持热更新）
+- **classpath://** - 类路径资源
+- **nacos://** - Nacos 配置中心（支持实时推送）
+
+详见 CLAUDE.md 文档。
+
 ## 健康检查
 
 ```bash
@@ -145,6 +162,7 @@ nacos-gateway-java/
 | Jackson | 2.16.0 | YAML 解析 |
 | Logback | 1.4.11 | 日志框架 |
 | SLF4J | 2.0.9 | 日志门面 |
+| Nacos Client | 2.3.2 | 配置中心集成 |
 
 ## 许可证
 
