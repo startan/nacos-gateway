@@ -556,26 +556,82 @@ EndpointConfig
 #### 4.1.2 关键类说明
 
 **ConfigLoader**
-- 职责：加载和验证配置文件
+- 职责：验证配置和反序列化（不再负责文件读取）
 - 关键方法：
-  - `load(String configPath)`: 从文件路径加载
-  - `load(Path configPath)`: 从 Path 对象加载
+  - `loadFromString(String configContent)`: 从配置内容字符串加载
   - `validate(GatewayConfig config)`: 验证配置
 - 配置验证规则：
   - 端口范围：1-65535
   - 路由引用的后端必须存在
   - 负载均衡策略必须是三种之一
 
-**ConfigWatcher**
-- 职责：监听配置文件变化
-- 实现方式：轮询文件修改时间（兼容 Windows）
-- 检查周期：1秒（可配置）
+**ConfigFileReader (interface)** - 新增
+- 职责：定义配置读取和监听的统一接口
 - 关键方法：
-  - `start()`: 启动监听
-  - `stop()`: 停止监听
+  - `readConfig()`: 读取配置内容
+  - `watchConfig(Runnable callback)`: 监听配置变化
+  - `stopWatching()`: 停止监听并释放资源
+  - `getSourceDescription()`: 获取配置来源描述
+
+**ConfigFileReaderFactory** - 新增
+- 职责：根据配置路径协议创建对应的 Reader 实例
+- 协议识别：
+  - `file://` → FileConfigReader
+  - `classpath://` → ClasspathConfigReader
+  - `nacos://` → NacosConfigReader
+  - 无协议前缀 → 默认使用 `file://`（向后兼容）
+
+**FileConfigReader** - 新增
+- 职责：从本地文件系统读取配置
+- 实现：
+  - 使用 `Files.readString()` 读取文件
+  - 使用 Vert.x 定时器轮询文件变更
+  - 默认检查间隔：1秒
+  - 支持热更新
+
+**ClasspathConfigReader** - 新增
+- 职责：从类路径读取配置
+- 实现：
+  - 使用 `getResourceAsStream()` 读取
+  - 不支持热更新（类路径资源通常不可变）
+
+**NacosConfigReader** - 新增
+- 职责：从 Nacos 配置中心读取配置
+- 实现：
+  - 使用 Nacos Client SDK
+  - 初始化时从 Nacos 加载配置
+  - 注册 Listener 接收实时推送更新
+  - 支持两种认证模式：AK/SK 和用户名/密码
+  - 使用 `AtomicBoolean` 保证监听状态线程安全
+
+**NacosUrlConfig** - 新增
+- 职责：封装 Nacos URL 配置参数
+- 主要属性：
+  - `dataId`: 配置标识符
+  - `group`: 配置分组
+  - `namespace`: 命名空间
+  - `serverAddr`: 服务器地址
+  - `authMode`: 认证模式
+  - `accessKey/secretKey`: AK/SK 认证凭据
+  - `username/password`: 用户名/密码认证凭据
+
+**NacosUrlParser** - 新增
+- 职责：解析 Nacos URL 字符串为 NacosUrlConfig 对象
+- URL 格式：`nacos://<dataId>?group=<group>&serverAddr=<addr>&...`
+
+**ConfigWatcher**
+- 职责：封装配置监听机制
+- 实现：
+  - 通过 `ConfigFileReader.watchConfig()` 注册监听
+  - 配置变更时调用 `ConfigReloader.reload()`
+  - 不再直接实现文件轮询逻辑
 
 **ConfigReloader**
 - 职责：执行配置热更新
+- 变更：
+  - `reload()` 方法改为无入参
+  - 通过 `ConfigFileReader.readConfig()` 读取配置
+  - 添加 `synchronized` 保证线程安全
 - 更新策略：
   - Copy-on-Write 更新路由表
   - 立即断开不符合新路由的连接
@@ -1185,6 +1241,121 @@ public class Route {
 ---
 
 ## 6. 配置指南
+
+### 6.0 配置文件路径协议
+
+Nacos Gateway 支持三种配置文件读取协议，通过配置路径的协议前缀自动识别。
+
+#### 6.0.1 file:// 协议（默认）
+
+从本地文件系统读取配置，支持文件变更监听和热更新。
+
+**特点**：
+- 支持热更新（轮询文件修改时间）
+- 默认协议（未指定协议时使用）
+- 兼容 Windows 和 Unix-like 系统
+
+**使用示例**：
+```bash
+# 默认方式（自动识别为 file://）
+java -jar gateway-launcher-1.0.0.jar nacos-gateway.yaml
+
+# 显式指定 file:// 协议
+java -jar gateway-launcher-1.0.0.jar file:///etc/nacos-gateway/config.yaml
+
+# Windows 路径
+java -jar gateway-launcher-1.0.0.jar file://D:/config/nacos-gateway.yaml
+```
+
+#### 6.0.2 classpath:// 协议
+
+从应用类路径读取配置，不支持热更新。
+
+**特点**：
+- 配置资源打包在 jar 文件中
+- 不支持热更新（类路径资源通常不可变）
+- 适合容器化部署场景
+
+**使用示例**：
+```bash
+java -jar gateway-launcher-1.0.0.jar classpath://nacos-gateway.yaml
+```
+
+#### 6.0.3 nacos:// 协议
+
+从 Nacos 配置中心读取配置，支持实时推送更新。
+
+**特点**：
+- 基于 gRPC 长连接的实时推送
+- 配置变更即时生效（秒级）
+- 支持多种认证模式
+- 支持多服务器集群配置
+
+**URL 格式**：
+```
+nacos://<dataId>?group=<group>&namespace=<namespace>&serverAddr=<serverAddr1>,<serverAddr2>&auth-mode=<mode>&...
+```
+
+**参数说明**：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| dataId | 是 | 配置的唯一标识符 |
+| group | 否 | 配置所属分组，默认：DEFAULT_GROUP |
+| namespace | 否 | 配置所属命名空间，默认：空字符串 |
+| serverAddr | 是 | Nacos 服务器地址，多个地址用逗号分隔 |
+| auth-mode | 否 | 认证模式：ak/sk 或 username/password |
+| accessKey | 否 | AK/SK 模式的访问密钥 |
+| secretKey | 否 | AK/SK 模式的密钥 |
+| username | 否 | 用户名/密码模式的用户名 |
+| password | 否 | 用户名/密码模式的密码 |
+
+**使用示例**：
+
+```bash
+# AK/SK 认证模式
+java -jar gateway-launcher-1.0.0.jar \
+  "nacos://nacos-gateway.yaml?group=gateway-group&namespace=dev&serverAddr=127.0.0.1:8848&auth-mode=ak/sk&accessKey=yourAccessKey&secretKey=yourSecretKey"
+
+# 用户名/密码认证模式
+java -jar gateway-launcher-1.0.0.jar \
+  "nacos://nacos-gateway.yaml?group=gateway-group&namespace=prod&serverAddr=192.168.1.100:8848,192.168.1.101:8848&auth-mode=username/password&username=nacos&password=nacos"
+
+# 使用默认分组和命名空间
+java -jar gateway-launcher-1.0.0.jar \
+  "nacos://config.yaml?serverAddr=127.0.0.1:8848"
+```
+
+**认证模式说明**：
+
+1. **AK/SK 模式**（推荐用于生产环境）
+   - 使用 Nacos 访问密钥对
+   - 安全性高
+   - 适合自动化部署
+
+2. **用户名/密码模式**
+   - 使用 Nacos 用户名和密码
+   - 配置简单
+   - 适合开发测试环境
+
+**优势**：
+- 配置集中管理
+- 支持版本控制
+- 支持灰度发布
+- 实时推送更新
+- 多环境支持（通过 namespace 隔离）
+
+#### 6.0.4 协议对比
+
+| 特性 | file:// | classpath:// | nacos:// |
+|------|---------|--------------|----------|
+| 配置来源 | 本地文件系统 | 应用类路径 | Nacos 配置中心 |
+| 热更新 | 支持 | 不支持 | 支持（实时推送） |
+| 配置管理 | 手动维护 | 手动维护 | 集中管理 |
+| 多环境支持 | 需要多个文件 | 需要多个构建 | 通过 namespace 隔离 |
+| 适用场景 | 开发测试 | 容器化部署 | 生产环境 |
+| 检测方式 | 轮询文件修改时间 | - | gRPC 长连接推送 |
+| 响应速度 | 秒级（默认 1s） | - | 秒级（实时） |
 
 ### 6.1 配置文件结构
 
