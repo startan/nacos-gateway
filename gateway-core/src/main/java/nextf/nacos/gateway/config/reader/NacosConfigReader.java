@@ -12,8 +12,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Nacos配置中心读取器
- * 从Nacos配置中心读取配置，支持实时推送更新
+ * Nacos configuration center reader
+ * Reads configuration from Nacos configuration center, supports real-time push updates
  */
 public class NacosConfigReader implements ConfigFileReader {
 
@@ -29,14 +29,14 @@ public class NacosConfigReader implements ConfigFileReader {
         this.urlConfig = NacosUrlParser.parse(nacosUrl);
 
         try {
-            // 创建ConfigService
+            // Create ConfigService
             configService = ConfigFactory.createConfigService(urlConfig.getProperties());
 
-            // 初始加载配置
+            // Initial configuration load
             this.currentConfig = configService.getConfig(
                 urlConfig.getDataId(),
                 urlConfig.getGroup(),
-                5000 // 5秒超时
+                5000 // 5 seconds timeout
             );
 
             if (currentConfig == null) {
@@ -76,7 +76,7 @@ public class NacosConfigReader implements ConfigFileReader {
 
                 @Override
                 public Executor getExecutor() {
-                    // 使用Nacos默认的线程池执行回调
+                    // Use Nacos default thread pool to execute callback
                     return null;
                 }
             };

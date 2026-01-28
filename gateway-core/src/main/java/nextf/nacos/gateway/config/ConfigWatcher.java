@@ -7,7 +7,7 @@ import nextf.nacos.gateway.config.reader.ConfigFileReader;
 
 /**
  * Configuration file watcher
- * 职责：封装 ConfigFileReader 的监听机制，衔接回调与热加载
+ * Responsibility: Encapsulate ConfigFileReader's listening mechanism to bridge callbacks and hot reload
  */
 public class ConfigWatcher {
 
@@ -30,7 +30,7 @@ public class ConfigWatcher {
 
         log.info("Starting config watcher for: {}", configFileReader.getSourceDescription());
 
-        // 通过 ConfigFileReader 注册监听回调
+        // Register listening callback through ConfigFileReader
         configFileReader.watchConfig(() -> {
             log.info("Configuration change detected, triggering reload...");
             reloader.reload();

@@ -3,8 +3,8 @@ package nextf.nacos.gateway.config.reader;
 import java.util.Properties;
 
 /**
- * Nacos URL配置
- * 解析nacos://协议的URL参数
+ * Nacos URL configuration
+ * Parses `nacos://` protocol URL parameters
  */
 public class NacosUrlConfig {
 
@@ -33,14 +33,14 @@ public class NacosUrlConfig {
     }
 
     /**
-     * 转换为Nacos Client需要的Properties
+     * Convert to Properties required by Nacos Client
      */
     public Properties getProperties() {
         Properties props = new Properties();
         props.put("serverAddr", serverAddr);
         props.put("namespace", namespace);
 
-        // 根据认证模式设置认证信息
+        // Set authentication information based on authentication mode
         if ("ak/sk".equalsIgnoreCase(authMode)) {
             if (accessKey != null && !accessKey.isEmpty()) {
                 props.put("accessKey", accessKey);

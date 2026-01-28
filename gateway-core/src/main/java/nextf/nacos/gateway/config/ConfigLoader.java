@@ -13,8 +13,8 @@ import java.util.Set;
 
 /**
  * Configuration loader for validating and parsing gateway configuration
- * 职责：验证配置合法性、反序列化为配置对象
- * 不再负责从文件/网络读取配置内容
+ * Responsibility: Validate configuration and deserialize into configuration objects
+ * No longer responsible for reading configuration content from files/network
  */
 public class ConfigLoader {
 
@@ -33,9 +33,9 @@ public class ConfigLoader {
     }
 
     /**
-     * 从配置内容字符串加载配置
-     * @param configContent 配置内容的字符串形式（YAML格式）
-     * @return GatewayConfig对象
+     * Load configuration from configuration content string
+     * @param configContent Configuration content string in YAML format
+     * @return GatewayConfig object
      */
     public GatewayConfig loadFromString(String configContent) throws IOException {
         if (configContent == null || configContent.isEmpty()) {

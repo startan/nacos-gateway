@@ -7,25 +7,25 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Nacos URL解析器
- * 解析 nacos:// 协议的URL
+ * Nacos URL parser
+ * Parses `nacos://` protocol URLs
  *
- * URL格式: nacos://<dataId>?group=<group>&namespace=<namespace>&serverAddr=<serverAddr>&auth-mode=<mode>&accessKey=<key>&secretKey=<secret>&username=<user>&password=<pass>
+ * URL format: nacos://<dataId>?group=<group>&namespace=<namespace>&serverAddr=<serverAddr>&auth-mode=<mode>&accessKey=<key>&secretKey=<secret>&username=<user>&password=<pass>
  */
 public class NacosUrlParser {
 
     /**
-     * 解析Nacos URL
+     * Parse Nacos URL
      */
     public static NacosUrlConfig parse(String urlString) throws IOException {
         if (!urlString.startsWith("nacos://")) {
             throw new IOException("Invalid Nacos URL: must start with 'nacos://'");
         }
 
-        // 移除协议前缀
+        // Remove protocol prefix
         String withoutProtocol = urlString.substring(8); // "nacos://".length()
 
-        // 分离dataId和查询参数
+        // Separate dataId and query parameters
         String dataId;
         Map<String, String> params = new HashMap<>();
 
@@ -42,10 +42,10 @@ public class NacosUrlParser {
             throw new IOException("Invalid Nacos URL: dataId is required");
         }
 
-        // URL解码dataId
+        // URL decode dataId
         dataId = URLDecoder.decode(dataId, StandardCharsets.UTF_8);
 
-        // 提取必需和可选参数
+        // Extract required and optional parameters
         String serverAddr = params.get("serverAddr");
         if (serverAddr == null || serverAddr.isEmpty()) {
             throw new IOException("Invalid Nacos URL: serverAddr is required");
@@ -64,7 +64,7 @@ public class NacosUrlParser {
     }
 
     /**
-     * 解析查询字符串
+     * Parse query string
      */
     private static Map<String, String> parseQueryString(String queryString) throws IOException {
         Map<String, String> params = new HashMap<>();

@@ -8,8 +8,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 类路径配置读取器
- * 从classpath读取配置，不支持热更新（classpath资源通常打包在jar中）
+ * Classpath configuration reader
+ * Reads configuration from classpath, does not support hot reload (classpath resources are usually packaged in jar)
  */
 public class ClasspathConfigReader implements ConfigFileReader {
 
@@ -39,12 +39,12 @@ public class ClasspathConfigReader implements ConfigFileReader {
     @Override
     public void watchConfig(Runnable callback) {
         log.info("Classpath resources do not support hot reloading. Watching disabled for: {}", resourcePath);
-        // Classpath资源不支持热更新，通常打包在jar中不可变
+        // Classpath resources do not support hot reload, usually packaged in jar and immutable
     }
 
     @Override
     public void stopWatching() {
-        // 无需停止，因为没有启动监听
+        // No need to stop, as no listener was started
     }
 
     @Override

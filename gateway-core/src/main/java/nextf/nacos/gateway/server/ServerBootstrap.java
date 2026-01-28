@@ -28,35 +28,35 @@ public class ServerBootstrap {
     }
 
     public void start() throws Exception {
-        // 1. 创建 Vert.x 实例（FileConfigReader 需要 Vertx 来设置定时器）
+        // 1. Create Vert.x instance (FileConfigReader needs Vertx to set up timers)
         vertx = Vertx.vertx();
 
-        // 2. 创建 ConfigFileReader
+        // 2. Create ConfigFileReader
         ConfigFileReader configFileReader = ConfigFileReaderFactory.getReader(configPath, vertx);
 
-        // 3. 读取配置内容
+        // 3. Read configuration content
         String configContent = configFileReader.readConfig();
 
-        // 4. 解析配置
+        // 4. Parse configuration
         ConfigLoader configLoader = new ConfigLoader();
         GatewayConfig config = configLoader.loadFromString(configContent);
 
-        // 5. 创建并启动网关服务器管理器
+        // 5. Create and start gateway server manager
         gatewayServerManager = new GatewayServerManager(vertx, config);
         gatewayServerManager.start();
 
-        // 6. 创建 ConfigReloader（传入 ConfigFileReader）
+        // 6. Create ConfigReloader (pass ConfigFileReader)
         ConfigReloader reloader = new ConfigReloader(
                 configLoader,
                 gatewayServerManager.getRegistry(),
                 gatewayServerManager.getRateLimitManager(),
-                configFileReader  // 新增参数
+                configFileReader  // new parameter
         );
 
-        // 7. 初始化 reloader 并设置当前配置
+        // 7. Initialize reloader and set current configuration
         reloader.setCurrentConfig(config);
 
-        // 8. 创建并启动 ConfigWatcher（传入 ConfigFileReader 和 ConfigReloader）
+        // 8. Create and start ConfigWatcher (pass ConfigFileReader and ConfigReloader)
         configWatcher = new ConfigWatcher(configFileReader, reloader);
         configWatcher.start();
 

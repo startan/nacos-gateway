@@ -11,7 +11,7 @@
     <packaging>pom</packaging>
 
     <name>Nacos Gateway</name>
-    <description>基于 Java + Vert.x 的高性能 Nacos 网关，提供负载均衡、动态路由与健康检查功能，用于实现多租户nacos注册中心云服务的关键组件。</description>
+    <description>High-performance Nacos gateway based on Java + Vert.x, providing load balancing, dynamic routing, and health check features for multi-tenant Nacos registry cloud service.</description>
 
     <licenses>
         <license>

@@ -9,7 +9,7 @@ import nextf.nacos.gateway.registry.GatewayRegistry;
 
 /**
  * Configuration reloader for hot reloading
- * 职责：协调 ConfigFileReader 和 ConfigLoader，完成配置热加载
+ * Responsibility: Coordinate ConfigFileReader and ConfigLoader to complete configuration hot reload
  */
 public class ConfigReloader {
 
@@ -37,37 +37,37 @@ public class ConfigReloader {
     }
 
     /**
-     * 重新加载配置（无入参，通过 ConfigFileReader 读取）
+     * Reload configuration (no parameters, read through ConfigFileReader)
      */
     public synchronized void reload() {
         try {
-            // 1. 通过 ConfigFileReader 读取最新配置内容
+            // 1. Read latest configuration content through ConfigFileReader
             String configContent = configFileReader.readConfig();
             log.info("Configuration content read from: {}", configFileReader.getSourceDescription());
 
-            // 2. 通过 ConfigLoader 解析和验证配置
+            // 2. Parse and validate configuration through ConfigLoader
             GatewayConfig newConfig = configLoader.loadFromString(configContent);
             log.info("New configuration parsed and validated successfully");
 
-            // 3. 检查端口是否变化（需要重启）
+            // 3. Check if ports have changed (requires restart)
             if (hasPortsChanged(newConfig)) {
                 log.warn("Port configuration changed - requires restart for changes to take effect");
             }
 
-            // 4. 更新路由
+            // 4. Update routes
             if (newConfig.getRoutes() != null) {
                 registry.updateRoutes(newConfig.getRoutes());
             }
 
-            // 5. 更新后端
+            // 5. Update backends
             if (newConfig.getBackends() != null) {
                 registry.updateBackends(newConfig.getBackends());
             }
 
-            // 6. 更新限流配置
+            // 6. Update rate limit configuration
             updateRateLimiters(newConfig);
 
-            // 7. 更新当前配置
+            // 7. Update current configuration
             currentConfig = newConfig;
 
             log.info("Configuration reloaded successfully");

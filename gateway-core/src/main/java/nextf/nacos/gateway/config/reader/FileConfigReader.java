@@ -10,8 +10,8 @@ import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 文件系统配置读取器
- * 从本地文件系统读取配置，支持文件变更监听
+ * File system configuration reader
+ * Reads configuration from local file system, supports file change monitoring
  */
 public class FileConfigReader implements ConfigFileReader {
 
@@ -24,7 +24,7 @@ public class FileConfigReader implements ConfigFileReader {
     private final long checkIntervalMs;
 
     public FileConfigReader(Vertx vertx, String configPath) {
-        this(vertx, configPath, 1000); // 默认1秒检查间隔
+        this(vertx, configPath, 1000); // Default 1 second check interval
     }
 
     public FileConfigReader(Vertx vertx, String configPath, long checkIntervalMs) {
@@ -32,7 +32,7 @@ public class FileConfigReader implements ConfigFileReader {
         this.configPath = Path.of(removeProtocolPrefix(configPath));
         this.checkIntervalMs = checkIntervalMs;
 
-        // 初始化最后修改时间
+        // Initialize last modified time
         if (Files.exists(this.configPath)) {
             updateLastModified();
         }
