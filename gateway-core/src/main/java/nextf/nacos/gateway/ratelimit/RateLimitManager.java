@@ -2,6 +2,7 @@ package nextf.nacos.gateway.ratelimit;
 
 import nextf.nacos.gateway.config.BackendConfig;
 import nextf.nacos.gateway.config.GatewayConfig;
+import nextf.nacos.gateway.config.RateLimitConfig;
 import nextf.nacos.gateway.config.ServerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,20 +32,20 @@ public class RateLimitManager {
     private final Map<String, ClientRateLimiter> clientLimiters = new ConcurrentHashMap<>();
 
     // Backend client rate limit configurations (for overriding server defaults)
-    private final Map<String, BackendConfig.BackendRateLimitConfig> backendRateLimitConfigs = new ConcurrentHashMap<>();
+    private final Map<String, RateLimitConfig> backendRateLimitConfigs = new ConcurrentHashMap<>();
 
     // Server-level configuration
-    private final AtomicReference<ServerConfig.ServerRateLimitConfig> serverRateLimitConfig;
+    private final AtomicReference<RateLimitConfig> serverRateLimitConfig;
 
     public RateLimitManager(GatewayConfig config) {
         // Get server-level rate limit config (from server.rateLimit section)
-        ServerConfig.ServerRateLimitConfig serverConfig = config.getServer() != null
+        RateLimitConfig serverConfig = config.getServer() != null
                 ? config.getServer().getRateLimit()
                 : null;
 
         if (serverConfig == null) {
             // Use default values if not configured
-            serverConfig = new ServerConfig.ServerRateLimitConfig();
+            serverConfig = new RateLimitConfig();
         }
 
         // Use AtomicReference to support hot reload
@@ -164,12 +165,12 @@ public class RateLimitManager {
     private ClientRateLimiter getOrCreateClientLimiter(String clientIp, String backendName) {
         return clientLimiters.computeIfAbsent(clientIp, ip -> {
             // Start with server-level defaults
-            ServerConfig.ServerRateLimitConfig currentConfig = serverRateLimitConfig.get();
+            RateLimitConfig currentConfig = serverRateLimitConfig.get();
             int maxQps = currentConfig.getMaxQpsPerClient();
             int maxConns = currentConfig.getMaxConnectionsPerClient();
 
             // Backend config overrides server config (if configured)
-            BackendConfig.BackendRateLimitConfig backendRateLimit = backendRateLimitConfigs.get(backendName);
+            RateLimitConfig backendRateLimit = backendRateLimitConfigs.get(backendName);
             if (backendRateLimit != null) {
                 // Only override if backend has configured these values (non-zero)
                 if (backendRateLimit.getMaxQpsPerClient() > 0) {
@@ -190,7 +191,7 @@ public class RateLimitManager {
      * Add or update backend-level rate limiter
      */
     public void updateBackendLimiter(String backendName, BackendConfig backendConfig) {
-        BackendConfig.BackendRateLimitConfig rateLimit = backendConfig.getRateLimit();
+        RateLimitConfig rateLimit = backendConfig.getRateLimit();
         if (rateLimit != null) {
             // Update backend-level rate limiter
             BackendRateLimiter limiter = new BackendRateLimiter(
@@ -214,13 +215,13 @@ public class RateLimitManager {
      * @param newConfig the new server rate limit configuration
      * @return true if update was successful, false otherwise
      */
-    public boolean updateServerRateLimitConfig(ServerConfig.ServerRateLimitConfig newConfig) {
+    public boolean updateServerRateLimitConfig(RateLimitConfig newConfig) {
         if (newConfig == null) {
             log.warn("Attempted to update with null config, ignoring");
             return false;
         }
 
-        ServerConfig.ServerRateLimitConfig oldConfig = serverRateLimitConfig.get();
+        RateLimitConfig oldConfig = serverRateLimitConfig.get();
 
         // Check if configuration actually changed
         if (configEquals(oldConfig, newConfig)) {
@@ -278,8 +279,8 @@ public class RateLimitManager {
     /**
      * Compare two server rate limit configs for equality
      */
-    private boolean configEquals(ServerConfig.ServerRateLimitConfig c1,
-                                  ServerConfig.ServerRateLimitConfig c2) {
+    private boolean configEquals(RateLimitConfig c1,
+                                  RateLimitConfig c2) {
         if (c1 == null && c2 == null) return true;
         if (c1 == null || c2 == null) return false;
         return c1.getMaxQps() == c2.getMaxQps() &&

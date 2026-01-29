@@ -16,7 +16,7 @@ public class ServerConfig {
     private PortsConfig ports;
 
     @JsonProperty("rateLimit")
-    private ServerRateLimitConfig rateLimit;
+    private RateLimitConfig rateLimit;
 
     public PortsConfig getPorts() {
         return ports;
@@ -26,11 +26,11 @@ public class ServerConfig {
         this.ports = ports;
     }
 
-    public ServerRateLimitConfig getRateLimit() {
+    public RateLimitConfig getRateLimit() {
         return rateLimit;
     }
 
-    public void setRateLimit(ServerRateLimitConfig rateLimit) {
+    public void setRateLimit(RateLimitConfig rateLimit) {
         this.rateLimit = rateLimit;
     }
 
@@ -151,65 +151,6 @@ public class ServerConfig {
                     "apiV1=" + apiV1 +
                     ", apiV2=" + apiV2 +
                     ", apiConsole=" + apiConsole +
-                    '}';
-        }
-    }
-
-    /**
-     * Server-level rate limit configuration
-     */
-    public static class ServerRateLimitConfig {
-        @JsonProperty("maxQps")
-        private int maxQps = 2000;
-
-        @JsonProperty("maxConnections")
-        private int maxConnections = 10000;
-
-        @JsonProperty("maxQpsPerClient")
-        private int maxQpsPerClient = 10;
-
-        @JsonProperty("maxConnectionsPerClient")
-        private int maxConnectionsPerClient = 5;
-
-        public int getMaxQps() {
-            return maxQps;
-        }
-
-        public void setMaxQps(int maxQps) {
-            this.maxQps = maxQps;
-        }
-
-        public int getMaxConnections() {
-            return maxConnections;
-        }
-
-        public void setMaxConnections(int maxConnections) {
-            this.maxConnections = maxConnections;
-        }
-
-        public int getMaxQpsPerClient() {
-            return maxQpsPerClient;
-        }
-
-        public void setMaxQpsPerClient(int maxQpsPerClient) {
-            this.maxQpsPerClient = maxQpsPerClient;
-        }
-
-        public int getMaxConnectionsPerClient() {
-            return maxConnectionsPerClient;
-        }
-
-        public void setMaxConnectionsPerClient(int maxConnectionsPerClient) {
-            this.maxConnectionsPerClient = maxConnectionsPerClient;
-        }
-
-        @Override
-        public String toString() {
-            return "ServerRateLimitConfig{" +
-                    "maxQps=" + maxQps +
-                    ", maxConnections=" + maxConnections +
-                    ", maxQpsPerClient=" + maxQpsPerClient +
-                    ", maxConnectionsPerClient=" + maxConnectionsPerClient +
                     '}';
         }
     }

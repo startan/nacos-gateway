@@ -77,7 +77,7 @@ public class ConfigLoader {
 
         // Validate server rate limit config (now under server section)
         if (serverConfig.getRateLimit() != null) {
-            ServerConfig.ServerRateLimitConfig rateLimit = serverConfig.getRateLimit();
+            RateLimitConfig rateLimit = serverConfig.getRateLimit();
             if (rateLimit.getMaxQps() <= 0) {
                 throw new IOException("Server max QPS must be positive");
             }
@@ -149,7 +149,7 @@ public class ConfigLoader {
             }
 
             // Validate backend rate limit config (if configured)
-            BackendConfig.BackendRateLimitConfig backendRateLimit = backend.getRateLimit();
+            RateLimitConfig backendRateLimit = backend.getRateLimit();
             if (backendRateLimit != null) {
                 if (backendRateLimit.getMaxQps() <= 0) {
                     throw new IOException("Backend max QPS must be positive for backend '" + backend.getName() + "'");

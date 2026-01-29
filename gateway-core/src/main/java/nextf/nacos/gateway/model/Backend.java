@@ -1,8 +1,8 @@
 package nextf.nacos.gateway.model;
 
 import nextf.nacos.gateway.config.BackendConfig;
-import nextf.nacos.gateway.config.BackendConfig.BackendRateLimitConfig;
 import nextf.nacos.gateway.config.PortType;
+import nextf.nacos.gateway.config.RateLimitConfig;
 import nextf.nacos.gateway.loadbalance.LoadBalancer;
 import nextf.nacos.gateway.loadbalance.LoadBalancerFactory;
 
@@ -105,7 +105,7 @@ public class Backend {
      * Get rate limit configuration for this backend
      * @return the rate limit configuration, or null if not configured
      */
-    public BackendRateLimitConfig getRateLimitConfig() {
+    public RateLimitConfig getRateLimitConfig() {
         return backendConfig != null ? backendConfig.getRateLimit() : null;
     }
 
