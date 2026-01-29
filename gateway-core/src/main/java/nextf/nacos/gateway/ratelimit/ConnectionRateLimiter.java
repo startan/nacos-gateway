@@ -21,6 +21,12 @@ public class ConnectionRateLimiter implements RateLimiter {
 
     @Override
     public boolean tryAcquire() {
+        if (maxConnections == -1) {
+            return true;  // No limit
+        }
+        if (maxConnections == 0) {
+            return false;  // Reject all
+        }
         int current;
         do {
             current = currentConnections.get();

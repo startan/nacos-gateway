@@ -5,20 +5,25 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /**
  * Rate limit configuration
  * Used by both server-level and backend-level rate limiting
+ *
+ * Value semantics:
+ * - -1: no limit (unlimited)
+ * - 0: reject all access (most extreme restriction)
+ * - > 0: normal limit
  */
 public class RateLimitConfig {
 
     @JsonProperty("maxQps")
-    private int maxQps = 2000;
+    private int maxQps = -1;
 
     @JsonProperty("maxConnections")
-    private int maxConnections = 10000;
+    private int maxConnections = -1;
 
     @JsonProperty("maxQpsPerClient")
-    private int maxQpsPerClient = 10;
+    private int maxQpsPerClient = -1;
 
     @JsonProperty("maxConnectionsPerClient")
-    private int maxConnectionsPerClient = 5;
+    private int maxConnectionsPerClient = -1;
 
     public int getMaxQps() {
         return maxQps;
@@ -51,6 +56,15 @@ public class RateLimitConfig {
     public void setMaxConnectionsPerClient(int maxConnectionsPerClient) {
         this.maxConnectionsPerClient = maxConnectionsPerClient;
     }
+
+    // Helper methods
+    // Note: 0 means "reject all", -1 means "no limit", >0 means "limited"
+    public boolean isQpsLimited() { return maxQps != -1; }
+    public boolean isConnectionsLimited() { return maxConnections != -1; }
+    public boolean isQpsPerClientLimited() { return maxQpsPerClient != -1; }
+    public boolean isConnectionsPerClientLimited() { return maxConnectionsPerClient != -1; }
+    public boolean isQpsRejected() { return maxQps == 0; }
+    public boolean isConnectionsRejected() { return maxConnections == 0; }
 
     @Override
     public String toString() {

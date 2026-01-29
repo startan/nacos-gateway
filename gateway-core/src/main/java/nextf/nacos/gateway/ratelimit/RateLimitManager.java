@@ -54,10 +54,10 @@ public class RateLimitManager {
         this.globalConnectionLimiter = new AtomicReference<>(new ConnectionRateLimiter(serverConfig.getMaxConnections()));
 
         log.info("Rate limit initialized: global QPS={}, global connections={}, per-client QPS={}, per-client connections={}",
-                serverConfig.getMaxQps(),
-                serverConfig.getMaxConnections(),
-                serverConfig.getMaxQpsPerClient(),
-                serverConfig.getMaxConnectionsPerClient());
+                serverConfig.getMaxQps() == -1 ? "unlimited" : serverConfig.getMaxQps(),
+                serverConfig.getMaxConnections() == -1 ? "unlimited" : serverConfig.getMaxConnections(),
+                serverConfig.getMaxQpsPerClient() == -1 ? "unlimited" : serverConfig.getMaxQpsPerClient(),
+                serverConfig.getMaxConnectionsPerClient() == -1 ? "unlimited" : serverConfig.getMaxConnectionsPerClient());
     }
 
     /**
@@ -68,9 +68,9 @@ public class RateLimitManager {
      * @return true if QPS permits are acquired, false otherwise
      */
     public boolean tryAcquire(String backendName, String clientIp) {
-        // 1. Check global QPS limit
+        // 1. Check global QPS limit (handles -1 as unlimited, 0 as rejected)
         if (!globalQpsLimiter.get().tryAcquire()) {
-            log.warn("Global QPS limit exceeded");
+            log.warn("Global QPS limit exceeded or rejected");
             return false;
         }
 
@@ -83,7 +83,7 @@ public class RateLimitManager {
             }
         }
 
-        // 3. Check client QPS limits
+        // 3. Check client QPS limits (respects cascading: Backend -> Server -> -1)
         ClientRateLimiter clientLimiter = getOrCreateClientLimiter(clientIp, backendName);
         if (!clientLimiter.tryAcquireQps()) {
             log.warn("Client-level QPS limit exceeded for: {}", clientIp);
@@ -100,9 +100,9 @@ public class RateLimitManager {
      * @return true if connection permits are acquired, false otherwise
      */
     public boolean tryAcquireConnection(String backendName, String clientIp) {
-        // 1. Check global connection limit
+        // 1. Check global connection limit (handles -1 as unlimited, 0 as rejected)
         if (!globalConnectionLimiter.get().tryAcquire()) {
-            log.warn("Global connection limit exceeded");
+            log.warn("Global connection limit exceeded or rejected");
             return false;
         }
 
@@ -160,28 +160,29 @@ public class RateLimitManager {
 
     /**
      * Get or create client rate limiter with proper config resolution
-     * Backend config can override server defaults for client limits
+     * Cascading: Backend (!= -1) -> Server (!= -1) -> -1 (no limit)
      */
     private ClientRateLimiter getOrCreateClientLimiter(String clientIp, String backendName) {
         return clientLimiters.computeIfAbsent(clientIp, ip -> {
-            // Start with server-level defaults
-            RateLimitConfig currentConfig = serverRateLimitConfig.get();
-            int maxQps = currentConfig.getMaxQpsPerClient();
-            int maxConns = currentConfig.getMaxConnectionsPerClient();
+            RateLimitConfig serverConfig = serverRateLimitConfig.get();
+            RateLimitConfig backendConfig = backendRateLimitConfigs.get(backendName);
 
-            // Backend config overrides server config (if configured)
-            RateLimitConfig backendRateLimit = backendRateLimitConfigs.get(backendName);
-            if (backendRateLimit != null) {
-                // Only override if backend has configured these values (non-zero)
-                if (backendRateLimit.getMaxQpsPerClient() > 0) {
-                    maxQps = backendRateLimit.getMaxQpsPerClient();
-                }
-                if (backendRateLimit.getMaxConnectionsPerClient() > 0) {
-                    maxConns = backendRateLimit.getMaxConnectionsPerClient();
-                }
-                log.debug("Using backend override for client {}: QPS={}, Connections={}",
-                        ip, maxQps, maxConns);
-            }
+            // Cascading: Backend (!= -1) -> Server (!= -1) -> -1 (no limit)
+            int maxQps = (backendConfig != null && backendConfig.isQpsPerClientLimited())
+                    ? backendConfig.getMaxQpsPerClient()
+                    : (serverConfig.isQpsPerClientLimited()
+                        ? serverConfig.getMaxQpsPerClient()
+                        : -1);
+
+            int maxConns = (backendConfig != null && backendConfig.isConnectionsPerClientLimited())
+                    ? backendConfig.getMaxConnectionsPerClient()
+                    : (serverConfig.isConnectionsPerClientLimited()
+                        ? serverConfig.getMaxConnectionsPerClient()
+                        : -1);
+
+            log.debug("Creating client limiter for {}: QPS={}, Connections={}",
+                    ip, maxQps == -1 ? "unlimited" : maxQps,
+                    maxConns == -1 ? "unlimited" : maxConns);
 
             return new ClientRateLimiter(ip, maxQps, maxConns);
         });
@@ -205,8 +206,16 @@ public class RateLimitManager {
             backendRateLimitConfigs.put(backendName, rateLimit);
 
             log.info("Updated backend rate limiter for {}: QPS={}, Connections={}, ClientQPS={}, ClientConns={}",
-                    backendName, rateLimit.getMaxQps(), rateLimit.getMaxConnections(),
-                    rateLimit.getMaxQpsPerClient(), rateLimit.getMaxConnectionsPerClient());
+                    backendName,
+                    rateLimit.getMaxQps() == -1 ? "unlimited" : rateLimit.getMaxQps(),
+                    rateLimit.getMaxConnections() == -1 ? "unlimited" : rateLimit.getMaxConnections(),
+                    rateLimit.getMaxQpsPerClient() == -1 ? "unlimited" : rateLimit.getMaxQpsPerClient(),
+                    rateLimit.getMaxConnectionsPerClient() == -1 ? "unlimited" : rateLimit.getMaxConnectionsPerClient());
+        } else {
+            // Remove backend limiter if config is null
+            backendLimiters.remove(backendName);
+            backendRateLimitConfigs.remove(backendName);
+            log.info("Removed backend rate limiter for {} (no limit configured)", backendName);
         }
     }
 
@@ -251,23 +260,16 @@ public class RateLimitManager {
             globalQpsLimiter.set(newQpsLimiter);
             globalConnectionLimiter.set(newConnLimiter);
 
-            // 5. Check if client rate limit config changed
-//            boolean clientConfigChanged =
-//                    newConfig.getMaxQpsPerClient() != oldConfig.getMaxQpsPerClient() ||
-//                    newConfig.getMaxConnectionsPerClient() != oldConfig.getMaxConnectionsPerClient();
-//
-//            if (clientConfigChanged) {
-//                // Clear client limiters to force re-creation with new config
-//                clearClientLimiters();
-//                log.info("Cleared client limiters due to server rate limit configuration change");
-//            }
-
             log.info("Server rate limit config updated: QPS {} -> {}, Connections {} -> {}, " +
                             "Per-client QPS {} -> {}, Per-client connections {} -> {}",
-                    oldConfig.getMaxQps(), newConfig.getMaxQps(),
-                    oldConfig.getMaxConnections(), newConfig.getMaxConnections(),
-                    oldConfig.getMaxQpsPerClient(), newConfig.getMaxQpsPerClient(),
-                    oldConfig.getMaxConnectionsPerClient(), newConfig.getMaxConnectionsPerClient());
+                    oldConfig.getMaxQps() == -1 ? "unlimited" : oldConfig.getMaxQps(),
+                    newConfig.getMaxQps() == -1 ? "unlimited" : newConfig.getMaxQps(),
+                    oldConfig.getMaxConnections() == -1 ? "unlimited" : oldConfig.getMaxConnections(),
+                    newConfig.getMaxConnections() == -1 ? "unlimited" : newConfig.getMaxConnections(),
+                    oldConfig.getMaxQpsPerClient() == -1 ? "unlimited" : oldConfig.getMaxQpsPerClient(),
+                    newConfig.getMaxQpsPerClient() == -1 ? "unlimited" : newConfig.getMaxQpsPerClient(),
+                    oldConfig.getMaxConnectionsPerClient() == -1 ? "unlimited" : oldConfig.getMaxConnectionsPerClient(),
+                    newConfig.getMaxConnectionsPerClient() == -1 ? "unlimited" : newConfig.getMaxConnectionsPerClient());
 
             return true;
         } catch (Exception e) {

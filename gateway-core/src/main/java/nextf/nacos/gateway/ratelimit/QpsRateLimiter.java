@@ -24,6 +24,12 @@ public class QpsRateLimiter implements RateLimiter {
 
     @Override
     public boolean tryAcquire() {
+        if (maxQps == -1) {
+            return true;  // No limit
+        }
+        if (maxQps == 0) {
+            return false;  // Reject all
+        }
         do {
             long window = System.currentTimeMillis() / WINDOW_SIZE_MS;
             long counterWindowVal = counterWindow.get();

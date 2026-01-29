@@ -163,19 +163,29 @@ nacos-gateway-java/
 
 #### 2.1.6 限流
 
-**需求描述**: 网关应支持 QPS 和并发连接数限流。
+**需求描述**: 网关应支持 QPS 和并发连接数限流，支持多级配置和灵活的限制策略。
 
 **详细说明**:
 - **QPS 限流**: 使用滑动窗口算法
 - **连接数限流**: 使用原子计数器
-- **全局限流**: 保护网关整体
-- **路由级限流**: 路由可覆盖全局配置
+- **多级配置**:
+  - 全局级（Server）：网关整体限制
+  - 后端级（Backend）：后端服务组限制
+  - 客户端级（Client）：单个客户端限制
+- **配置级联**: Backend → Server → -1（无限制）
+- **值语义**:
+  - `-1`: 无限制（unlimited）
+  - `0`: 拒绝所有访问（最极端的限制）
+  - `> 0`: 正常限流
+- **默认行为**: 未配置时默认为 -1（无限制）
 - 超限返回 HTTP 429
 
 **验收标准**:
 - 限流准确生效
 - 性能开销小（< 5%）
 - 限流粒度正确
+- 级联配置正确工作
+- 支持热更新
 
 #### 2.1.7 配置热更新
 
@@ -491,9 +501,16 @@ nacos-gateway-java/
 ```
 GatewayConfig
     ├── ServerConfig
+    │   ├── PortsConfig
+    │   └── RateLimitConfig
     ├── List<RouteConfig>
     ├── List<BackendConfig>
-    ├── RateLimitConfig
+    │   ├── name (String)
+    │   ├── loadBalance (String)
+    │   ├── BackendPortsConfig
+    │   ├── HealthProbeConfig
+    │   ├── RateLimitConfig
+    │   └── List<EndpointConfig>
     ├── TimeoutConfig
     ├── LoggingConfig
     └── ManagementConfig
@@ -502,14 +519,29 @@ GatewayConfig
 RouteConfig
     ├── host (String)
     ├── path (String)
-    ├── backend (String)
-    ├── qpsLimit (Integer)
-    └── maxConnections (Integer)
+    └── backend (String)
+
+RateLimitConfig
+    ├── maxQps (int = -1)              # -1: 无限制, 0: 拒绝所有, >0: 正常限流
+    ├── maxConnections (int = -1)
+    ├── maxQpsPerClient (int = -1)
+    └── maxConnectionsPerClient (int = -1)
+    ├── isQpsLimited(): boolean
+    ├── isConnectionsLimited(): boolean
+    ├── isQpsPerClientLimited(): boolean
+    ├── isConnectionsPerClientLimited(): boolean
+    ├── isQpsRejected(): boolean
+    └── isConnectionsRejected(): boolean
 
 BackendConfig
     ├── name (String)
     ├── loadBalance (String)
+    ├── BackendPortsConfig
+    │   ├── apiV1 (int)
+    │   ├── apiV2 (int)
+    │   └── apiConsole (int)
     ├── HealthProbeConfig
+    ├── RateLimitConfig
     └── List<EndpointConfig>
 
 EndpointConfig
@@ -787,45 +819,78 @@ HealthCheckTask
 
 ```
 RateLimitManager
-    ├── QpsRateLimiter globalQpsLimiter
-    ├── ConnectionRateLimiter globalConnectionLimiter
-    ├── Map<String, RouteRateLimiter> routeLimiters
-    ├── tryAcquire(routeId): boolean
-    └── release(routeId)
+    ├── AtomicReference<RateLimitConfig> serverRateLimitConfig
+    ├── AtomicReference<QpsRateLimiter> globalQpsLimiter
+    ├── AtomicReference<ConnectionRateLimiter> globalConnectionLimiter
+    ├── Map<String, BackendRateLimiter> backendLimiters
+    ├── Map<String, ClientRateLimiter> clientLimiters
+    ├── Map<String, RateLimitConfig> backendRateLimitConfigs
+    ├── tryAcquire(backendName, clientIp): boolean
+    ├── tryAcquireConnection(backendName, clientIp): boolean
+    ├── releaseConnection(backendName, clientIp)
+    ├── updateBackendLimiter(backendName, backendConfig)
+    └── updateServerRateLimitConfig(newConfig): boolean
 
 QpsRateLimiter
-    ├── int maxQps
-    ├── long windowSizeMs
-    ├── ConcurrentMap<Long, AtomicInteger> windows
-    └── tryAcquire(): boolean
+    ├── int maxQps                      # -1: 无限制, 0: 拒绝所有
+    ├── tryAcquire(): boolean
+    └── getMaxQps(): int
 
 ConnectionRateLimiter
-    ├── int maxConnections
+    ├── int maxConnections              # -1: 无限制, 0: 拒绝所有
     ├── AtomicInteger currentConnections
     ├── tryAcquire(): boolean
-    └── release()
+    ├── release()
+    ├── getCurrentConnections(): int
+    └── getMaxConnections(): int
 
-RouteRateLimiter
+ClientRateLimiter
+    ├── String clientId
+    ├── int maxQps
+    ├── int maxConnections
+    ├── boolean qpsLimited             # 是否启用了 QPS 限流
+    ├── boolean connectionLimited      # 是否启用了连接数限流
     ├── QpsRateLimiter qpsLimiter
     ├── ConnectionRateLimiter connectionLimiter
-    ├── tryAcquire(): boolean
+    ├── tryAcquireQps(): boolean
+    ├── tryAcquireConnection(): boolean
     └── release()
+
+BackendRateLimiter
+    ├── String backendName
+    ├── int maxQps
+    ├── int maxConnections
+    ├── QpsRateLimiter qpsLimiter
+    ├── ConnectionRateLimiter connectionLimiter
+    ├── tryAcquireQps(): boolean
+    ├── tryAcquireConnection(): boolean
+    ├── release()
+    └── getCurrentConnections(): int
 ```
 
 #### 4.5.2 限流算法
 
+**值语义**
+- **`-1`**: 无限制（unlimited）- 所有请求通过
+- **`0`**: 拒绝所有访问（reject all）- 所有请求被拒绝
+- **`> 0`**: 正常限流 - 使用限流算法
+
 **QPS 限流（滑动窗口）**
 ```
-1. 获取当前时间窗口
+1. 检查 maxQps 值
+   if maxQps == -1: return true     # 无限制
+   if maxQps == 0: return false    # 拒绝所有
+
+2. 获取当前时间窗口
    window = currentTime / windowSizeMs
 
-2. 原子递增计数器
+3. 原子递增计数器
    count = windows[window].incrementAndGet()
 
-3. 清理旧窗口
+4. 清理旧窗口
    remove windows < currentWindow - 1
 
-4. 检查是否超限
+5. 检查是否超限
    if count > maxQps:
        decrementAndGet()
        return false
@@ -834,15 +899,55 @@ RouteRateLimiter
 
 **连接数限流**
 ```
-1. CAS 操作递增
+1. 检查 maxConnections 值
+   if maxConnections == -1: return true     # 无限制
+   if maxConnections == 0: return false     # 拒绝所有
+
+2. CAS 操作递增
    do {
        current = currentConnections.get()
        if current >= maxConnections:
            return false
    } while (!compareAndSet(current, current + 1))
 
-2. 释放时递减
+3. 释放时递减
    currentConnections.decrementAndGet()
+```
+
+#### 4.5.3 配置级联
+
+**级联规则**
+```
+ClientRateLimiter 配置解析:
+1. 优先使用 Backend 级配置
+   if backendConfig != null && backendConfig.isXxxLimited():
+       return backendConfig.getMaxXxx()
+
+2. 其次使用 Server 级配置
+   if serverConfig.isXxxLimited():
+       return serverConfig.getMaxXxx()
+
+3. 默认无限制
+   return -1
+```
+
+**配置示例**
+```yaml
+server:
+  rateLimit:
+    maxQpsPerClient: 100          # Server 级默认: 100 QPS/客户端
+    maxConnectionsPerClient: 10   # Server 级默认: 10 连接/客户端
+
+backends:
+  - name: special-service
+    rateLimit:
+      maxQpsPerClient: -1         # Backend 覆盖: 无限制
+      maxConnectionsPerClient: -1 # Backend 覆盖: 无限制
+
+  - name: restricted-service
+    rateLimit:
+      maxQpsPerClient: 10         # Backend 覆盖: 10 QPS/客户端
+      maxConnectionsPerClient: 2  # Backend 覆盖: 2 连接/客户端
 ```
 
 ### 4.6 代理模块 (proxy)
@@ -1392,12 +1497,13 @@ backends:
         port: 9848
         priority: 2
 
-# 限流配置
-rateLimit:
-  globalQpsLimit: 10000         # 全局 QPS 限制
-  globalMaxConnections: 5000    # 全局连接数限制
-  defaultQpsLimit: 1000         # 默认 QPS 限制
-  defaultMaxConnections: 500    # 默认连接数限制
+# 限流配置（值语义：-1=无限制, 0=拒绝所有, >0=正常限流）
+server:
+  rateLimit:
+    maxQps: 10000               # 全局 QPS 限制（-1=无限制）
+    maxConnections: 5000        # 全局连接数限制（-1=无限制）
+    maxQpsPerClient: 1000       # 每客户端 QPS 限制（-1=无限制）
+    maxConnectionsPerClient: 500 # 每客户端连接数限制（-1=无限制）
 
 # 超时配置
 timeout:
@@ -1465,12 +1571,30 @@ management:
 
 #### 限流配置 (rateLimit)
 
+**值语义**:
+- `-1`: 无限制（unlimited）
+- `0`: 拒绝所有访问（reject all）
+- `> 0`: 正常限流
+
+**Server 级配置** (server.rateLimit):
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| globalQpsLimit | int | 10000 | 全局 QPS 限制 |
-| globalMaxConnections | int | 5000 | 全局连接数限制 |
-| defaultQpsLimit | int | 1000 | 默认 QPS 限制 |
-| defaultMaxConnections | int | 500 | 默认连接数限制 |
+| maxQps | int | -1 | 全局 QPS 限制（-1=无限制） |
+| maxConnections | int | -1 | 全局连接数限制（-1=无限制） |
+| maxQpsPerClient | int | -1 | 每客户端 QPS 限制（-1=无限制） |
+| maxConnectionsPerClient | int | -1 | 每客户端连接数限制（-1=无限制） |
+
+**Backend 级配置** (backends[].rateLimit):
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| maxQps | int | -1 | 后端 QPS 限制（-1=无限制） |
+| maxConnections | int | -1 | 后端连接数限制（-1=无限制） |
+| maxQpsPerClient | int | -1 | 每客户端 QPS 限制（-1=无限制） |
+| maxConnectionsPerClient | int | -1 | 每客户端连接数限制（-1=无限制） |
+
+**配置级联**:
+- Backend 配置优先级高于 Server 配置
+- Client 限流优先使用 Backend 级配置，未配置时使用 Server 级配置，都未配置时为 -1（无限制）
 
 #### 超时配置 (timeout)
 
@@ -1557,11 +1681,13 @@ backends:
         port: 8080
         priority: 1
 
-rateLimit:
-  globalQpsLimit: 50000
-  globalMaxConnections: 10000
-  defaultQpsLimit: 1000
-  defaultMaxConnections: 500
+# 限流配置（值语义：-1=无限制, 0=拒绝所有, >0=正常限流）
+server:
+  rateLimit:
+    maxQps: 50000               # 全局 QPS 限制
+    maxConnections: 10000       # 全局连接数限制
+    maxQpsPerClient: 1000       # 每客户端 QPS 限制
+    maxConnectionsPerClient: 500 # 每客户端连接数限制
 ```
 
 #### 示例 3：gRPC 服务代理
@@ -1613,7 +1739,10 @@ backends:
    - 端口范围：1-65535
 
 5. **限流验证**
-   - 所有限制必须为正数
+   - 所有限制值必须 >= -1
+   - -1 表示无限制（unlimited）
+   - 0 表示拒绝所有访问（reject all）
+   - > 0 表示正常限流
 
 ---
 
@@ -2133,12 +2262,13 @@ backends:
         port: 80
         priority: 2
 
-# Rate limiting configuration
-rateLimit:
-  globalQpsLimit: 50000
-  globalMaxConnections: 20000
-  defaultQpsLimit: 2000
-  defaultMaxConnections: 1000
+# Rate limiting configuration (值语义：-1=无限制, 0=拒绝所有, >0=正常限流)
+server:
+  rateLimit:
+    maxQps: 50000               # 全局 QPS 限制
+    maxConnections: 20000       # 全局连接数限制
+    maxQpsPerClient: 2000       # 每客户端 QPS 限制
+    maxConnectionsPerClient: 1000 # 每客户端连接数限制
 
 # Timeout configuration
 timeout:

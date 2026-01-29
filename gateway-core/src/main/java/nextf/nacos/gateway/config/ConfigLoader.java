@@ -78,17 +78,19 @@ public class ConfigLoader {
         // Validate server rate limit config (now under server section)
         if (serverConfig.getRateLimit() != null) {
             RateLimitConfig rateLimit = serverConfig.getRateLimit();
-            if (rateLimit.getMaxQps() <= 0) {
-                throw new IOException("Server max QPS must be positive");
+            // Value semantics: -1 = no limit, 0 = reject all, > 0 = normal limit
+            // Only reject values < -1 (invalid)
+            if (rateLimit.getMaxQps() < -1) {
+                throw new IOException("Server max QPS must be >= -1");
             }
-            if (rateLimit.getMaxConnections() <= 0) {
-                throw new IOException("Server max connections must be positive");
+            if (rateLimit.getMaxConnections() < -1) {
+                throw new IOException("Server max connections must be >= -1");
             }
-            if (rateLimit.getMaxQpsPerClient() <= 0) {
-                throw new IOException("Server max QPS per client must be positive");
+            if (rateLimit.getMaxQpsPerClient() < -1) {
+                throw new IOException("Server max QPS per client must be >= -1");
             }
-            if (rateLimit.getMaxConnectionsPerClient() <= 0) {
-                throw new IOException("Server max connections per client must be positive");
+            if (rateLimit.getMaxConnectionsPerClient() < -1) {
+                throw new IOException("Server max connections per client must be >= -1");
             }
         }
 
@@ -151,17 +153,19 @@ public class ConfigLoader {
             // Validate backend rate limit config (if configured)
             RateLimitConfig backendRateLimit = backend.getRateLimit();
             if (backendRateLimit != null) {
-                if (backendRateLimit.getMaxQps() <= 0) {
-                    throw new IOException("Backend max QPS must be positive for backend '" + backend.getName() + "'");
+                // Value semantics: -1 = no limit, 0 = reject all, > 0 = normal limit
+                // Only reject values < -1 (invalid)
+                if (backendRateLimit.getMaxQps() < -1) {
+                    throw new IOException("Backend max QPS must be >= -1 for backend '" + backend.getName() + "'");
                 }
-                if (backendRateLimit.getMaxConnections() <= 0) {
-                    throw new IOException("Backend max connections must be positive for backend '" + backend.getName() + "'");
+                if (backendRateLimit.getMaxConnections() < -1) {
+                    throw new IOException("Backend max connections must be >= -1 for backend '" + backend.getName() + "'");
                 }
-                if (backendRateLimit.getMaxQpsPerClient() < 0) {
-                    throw new IOException("Backend max QPS per client must be non-negative for backend '" + backend.getName() + "'");
+                if (backendRateLimit.getMaxQpsPerClient() < -1) {
+                    throw new IOException("Backend max QPS per client must be >= -1 for backend '" + backend.getName() + "'");
                 }
-                if (backendRateLimit.getMaxConnectionsPerClient() < 0) {
-                    throw new IOException("Backend max connections per client must be non-negative for backend '" + backend.getName() + "'");
+                if (backendRateLimit.getMaxConnectionsPerClient() < -1) {
+                    throw new IOException("Backend max connections per client must be >= -1 for backend '" + backend.getName() + "'");
                 }
             }
         }
