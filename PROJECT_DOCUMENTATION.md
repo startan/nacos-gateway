@@ -27,7 +27,7 @@
 - **负载均衡**: 轮询、随机、最少连接三种策略
 - **优先级分组**: 端点优先级机制，高优先级全挂才降级
 - **健康检查**: HTTP/1 和 HTTP/2 探针，连续阈值机制
-- **限流保护**: QPS + 并发连接数限流，全局+路由级
+- **限流保护**: QPS + 并发连接数限流，支持 Route/Backend/Server 三级级联配置
 - **配置热更新**: 文件监听实现配置动态加载，无需重启
 - **连接管理**: 每个客户端连接对应一个后端连接
 
@@ -169,10 +169,10 @@ nacos-gateway-java/
 - **QPS 限流**: 使用滑动窗口算法
 - **连接数限流**: 使用原子计数器
 - **多级配置**:
-  - 全局级（Server）：网关整体限制
+  - 路由级（Route）：单路由限制（最高优先级）
   - 后端级（Backend）：后端服务组限制
   - 客户端级（Client）：单个客户端限制
-- **配置级联**: Backend → Server → -1（无限制）
+- **配置级联**: Route → Backend → Server → -1（无限制）
 - **值语义**:
   - `-1`: 无限制（unlimited）
   - `0`: 拒绝所有访问（最极端的限制）
@@ -519,7 +519,8 @@ GatewayConfig
 RouteConfig
     ├── host (String)
     ├── path (String)
-    └── backend (String)
+    ├── backend (String)
+    └── rateLimit (RateLimitConfig)
 
 RateLimitConfig
     ├── maxQps (int = -1)              # -1: 无限制, 0: 拒绝所有, >0: 正常限流
@@ -684,8 +685,7 @@ Route
     ├── hostPattern (String)
     ├── pathPattern (String)
     ├── backendName (String)
-    ├── qpsLimit (Integer)
-    └── maxConnections (Integer)
+    └── rateLimit (RateLimitConfig)
 
 HostMatcher
     ├── pattern (String)
@@ -919,15 +919,19 @@ BackendRateLimiter
 **级联规则**
 ```
 ClientRateLimiter 配置解析:
-1. 优先使用 Backend 级配置
+1. 优先使用 Route 级配置
+   if routeConfig != null && routeConfig.isXxxLimited():
+       return routeConfig.getMaxXxx()
+
+2. 其次使用 Backend 级配置
    if backendConfig != null && backendConfig.isXxxLimited():
        return backendConfig.getMaxXxx()
 
-2. 其次使用 Server 级配置
+3. 再次使用 Server 级配置
    if serverConfig.isXxxLimited():
        return serverConfig.getMaxXxx()
 
-3. 默认无限制
+4. 默认无限制
    return -1
 ```
 
@@ -937,6 +941,13 @@ server:
   rateLimit:
     maxQpsPerClient: 100          # Server 级默认: 100 QPS/客户端
     maxConnectionsPerClient: 10   # Server 级默认: 10 连接/客户端
+
+routes:
+  - host: "api.example.com"
+    backend: api-service
+    rateLimit:
+      maxQpsPerClient: 500        # Route 级覆盖: 500 QPS/客户端
+      maxConnectionsPerClient: 50  # Route 级覆盖: 50 连接/客户端
 
 backends:
   - name: special-service
@@ -1169,8 +1180,7 @@ public class RouteConfig {
     private String host;              // Host 匹配模式（支持 *.example.com）
     private String path;              // Path 匹配模式（支持 * 和 **）
     private String backend;           // 后端服务名称
-    private Integer qpsLimit;         // QPS 限流（可选，覆盖全局配置）
-    private Integer maxConnections;   // 连接数限流（可选，覆盖全局配置）
+    private RateLimitConfig rateLimit; // 路由级限流配置（可选，最高优先级）
 }
 ```
 
@@ -1178,8 +1188,7 @@ public class RouteConfig {
 - `getHost()`: 获取 Host 模式
 - `getPath()`: 获取 Path 模式
 - `getBackend()`: 获取后端名称
-- `getQpsLimit()`: 获取 QPS 限流
-- `getMaxConnections()`: 获取连接数限流
+- `getRateLimit()`: 获取路由级限流配置
 
 #### BackendConfig
 
@@ -1338,8 +1347,7 @@ public class Route {
     private final String hostPattern;             // Host 模式
     private final String pathPattern;             // Path 模式
     private final String backendName;             // 后端名称
-    private final Integer qpsLimit;               // QPS 限流
-    private final Integer maxConnections;         // 连接数限流
+    private final RateLimitConfig rateLimit;      // 路由级限流配置
 }
 ```
 
@@ -1476,6 +1484,11 @@ routes:
   - host: "*.nacos.io"          # Host 模式（支持通配符）
     path: "/**"                 # Path 模式（支持 * 和 **）
     backend: example-service    # 后端服务名称
+    rateLimit:                  # 可选：路由级限流配置
+      maxQps: 1000              # 路由级 QPS 限流（覆盖 backend/server）
+      maxConnections: 500       # 路由级连接数限流（覆盖 backend/server）
+      maxQpsPerClient: 100      # 路由级每客户端 QPS（覆盖 backend/server）
+      maxConnectionsPerClient: 10 # 路由级每客户端连接数（覆盖 backend/server）
     qpsLimit: 1000              # 可选：QPS 限流
     maxConnections: 500         # 可选：连接数限流
 
@@ -1539,8 +1552,18 @@ management:
 | host | string | 是 | Host 匹配模式，支持 `*.example.com` 通配符 |
 | path | string | 是 | Path 匹配模式，支持 `*` 和 `**` 通配符 |
 | backend | string | 是 | 后端服务名称 |
-| qpsLimit | int | 否 | QPS 限流，覆盖全局配置 |
-| maxConnections | int | 否 | 连接数限流，覆盖全局配置 |
+| rateLimit | object | 否 | 路由级限流配置（优先级高于 Backend 和 Server） |
+
+**路由级限流配置 (routes[].rateLimit)**
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| maxQps | int | -1 (继承) | 路由级 QPS 限制 |
+| maxConnections | int | -1 (继承) | 路由级连接数限制 |
+| maxQpsPerClient | int | -1 (继承) | 路由级每客户端 QPS 限制 |
+| maxConnectionsPerClient | int | -1 (继承) | 路由级每客户端连接数限制 |
+
+**优先级规则**: Route > Backend > Server > -1 (无限制)
 
 #### 后端配置 (backends)
 
@@ -1593,8 +1616,8 @@ management:
 | maxConnectionsPerClient | int | -1 | 每客户端连接数限制（-1=无限制） |
 
 **配置级联**:
-- Backend 配置优先级高于 Server 配置
-- Client 限流优先使用 Backend 级配置，未配置时使用 Server 级配置，都未配置时为 -1（无限制）
+- Route 配置优先级最高（Route > Backend > Server）
+- Client 限流优先使用 Route 级配置，未配置时使用 Backend 级配置，再未配置时使用 Server 级配置，都未配置时为 -1（无限制）
 
 #### 超时配置 (timeout)
 
@@ -1651,13 +1674,15 @@ routes:
   - host: "api.example.com"
     path: "/api/**"
     backend: api-service
-    qpsLimit: 5000
-    maxConnections: 1000
+    rateLimit:                   # 路由级限流配置（最高优先级）
+      maxQps: 5000
+      maxConnections: 1000
 
   - host: "static.example.com"
     path: "/**"
     backend: static-service
-    qpsLimit: 10000
+    rateLimit:
+      maxQps: 10000
 
 backends:
   - name: api-service

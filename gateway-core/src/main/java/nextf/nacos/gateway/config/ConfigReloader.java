@@ -116,10 +116,19 @@ public class ConfigReloader {
             updated = true;
         }
 
+        // 3. Update route rate limiters
+        if (newConfig.getRoutes() != null) {
+            for (RouteConfig routeConfig : newConfig.getRoutes()) {
+                String routeId = routeConfig.getHost(); // Route.getId() returns hostPattern
+                rateLimitManager.updateRouteLimiter(routeId, routeConfig);
+            }
+            updated = true;
+        }
+
         if (updated) {
             rateLimitManager.clearClientLimiters();
         }
-        log.info("Updated rate limiters (server and backend level)");
+        log.info("Updated rate limiters (server, backend and route level)");
     }
 
     public GatewayConfig getCurrentConfig() {

@@ -13,6 +13,9 @@ public class RouteConfig {
     @JsonProperty("backend")
     private String backend;
 
+    @JsonProperty("rateLimit")
+    private RateLimitConfig rateLimit;
+
     public String getHost() {
         return host;
     }
@@ -29,11 +32,24 @@ public class RouteConfig {
         this.backend = backend;
     }
 
+    public RateLimitConfig getRateLimit() {
+        return rateLimit;
+    }
+
+    public void setRateLimit(RateLimitConfig rateLimit) {
+        this.rateLimit = rateLimit;
+    }
+
+    public boolean hasCustomRateLimit() {
+        return rateLimit != null;
+    }
+
     @Override
     public String toString() {
         return "RouteConfig{" +
                 "host='" + host + '\'' +
                 ", backend='" + backend + '\'' +
+                ", rateLimit=" + rateLimit +
                 '}';
     }
 }

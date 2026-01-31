@@ -188,7 +188,7 @@ public class GatewayServer {
         String backendName = route.getBackendName();
 
         // Check rate limit (QPS only, no connection check)
-        if (!rateLimitManager.tryAcquire(backendName, clientIp)) {
+        if (!rateLimitManager.tryAcquire(backendName, clientIp, route.getId())) {
             log.warn("Rate limit exceeded for client: {}", clientIp);
             request.response().setStatusCode(429).end("Too Many Requests");
             return;

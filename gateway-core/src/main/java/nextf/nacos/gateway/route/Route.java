@@ -1,5 +1,6 @@
 package nextf.nacos.gateway.route;
 
+import nextf.nacos.gateway.config.RateLimitConfig;
 import nextf.nacos.gateway.config.RouteConfig;
 
 import java.util.List;
@@ -14,10 +15,12 @@ public class Route {
 
     private final String hostPattern;
     private final String backendName;
+    private final RateLimitConfig rateLimitConfig;
 
     public Route(RouteConfig config) {
         this.hostPattern = config.getHost();
         this.backendName = config.getBackend();
+        this.rateLimitConfig = config.getRateLimit();
     }
 
     /**
@@ -48,18 +51,23 @@ public class Route {
         return backendName;
     }
 
+    public RateLimitConfig getRateLimitConfig() {
+        return rateLimitConfig;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Route route = (Route) o;
         return Objects.equals(hostPattern, route.hostPattern) &&
-               Objects.equals(backendName, route.backendName);
+               Objects.equals(backendName, route.backendName) &&
+               Objects.equals(rateLimitConfig, route.rateLimitConfig);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(hostPattern, backendName);
+        return Objects.hash(hostPattern, backendName, rateLimitConfig);
     }
 
     @Override
@@ -67,6 +75,7 @@ public class Route {
         return "Route{" +
                 "hostPattern='" + hostPattern + '\'' +
                 ", backendName='" + backendName + '\'' +
+                ", rateLimitConfig=" + rateLimitConfig +
                 '}';
     }
 }

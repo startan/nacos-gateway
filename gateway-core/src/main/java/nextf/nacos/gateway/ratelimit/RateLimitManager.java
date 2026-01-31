@@ -3,6 +3,7 @@ package nextf.nacos.gateway.ratelimit;
 import nextf.nacos.gateway.config.BackendConfig;
 import nextf.nacos.gateway.config.GatewayConfig;
 import nextf.nacos.gateway.config.RateLimitConfig;
+import nextf.nacos.gateway.config.RouteConfig;
 import nextf.nacos.gateway.config.ServerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,10 +13,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Rate limit manager with three-tier limiting:
+ * Rate limit manager with four-tier limiting:
  * 1. Global limits (gateway level)
- * 2. Backend limits (backend service group level)
- * 3. Client limits (per-client, can be overridden by backend config)
+ * 2. Route limits (route level)
+ * 3. Backend limits (backend service group level)
+ * 4. Client limits (per-client, can be overridden by route/backend config)
  */
 public class RateLimitManager {
 
@@ -28,11 +30,17 @@ public class RateLimitManager {
     // Backend-level limiters
     private final Map<String, BackendRateLimiter> backendLimiters = new ConcurrentHashMap<>();
 
+    // Route-level limiters
+    private final Map<String, RouteRateLimiter> routeRateLimiters = new ConcurrentHashMap<>();
+
     // Client-level limiters (identified by client IP)
     private final Map<String, ClientRateLimiter> clientLimiters = new ConcurrentHashMap<>();
 
     // Backend client rate limit configurations (for overriding server defaults)
     private final Map<String, RateLimitConfig> backendRateLimitConfigs = new ConcurrentHashMap<>();
+
+    // Route-level rate limit configurations (for overriding backend/server defaults)
+    private final Map<String, RateLimitConfig> routeRateLimitConfigs = new ConcurrentHashMap<>();
 
     // Server-level configuration
     private final AtomicReference<RateLimitConfig> serverRateLimitConfig;
@@ -65,16 +73,28 @@ public class RateLimitManager {
      * Connection limit should be checked separately when creating a new ProxyConnection
      * @param backendName backend service name
      * @param clientIp client IP address
+     * @param routeId route identifier (Route.getId())
      * @return true if QPS permits are acquired, false otherwise
      */
-    public boolean tryAcquire(String backendName, String clientIp) {
+    public boolean tryAcquire(String backendName, String clientIp, String routeId) {
         // 1. Check global QPS limit (handles -1 as unlimited, 0 as rejected)
         if (!globalQpsLimiter.get().tryAcquire()) {
             log.warn("Global QPS limit exceeded or rejected");
             return false;
         }
 
-        // 2. Check backend QPS limits (if configured)
+        // 2. Check route-level QPS limits
+        if (routeId != null) {
+            RouteRateLimiter routeLimiter = routeRateLimiters.get(routeId);
+            if (routeLimiter != null) {
+                if (!routeLimiter.tryAcquireQps()) {
+                    log.warn("Route-level QPS limit exceeded for: {}", routeId);
+                    return false;
+                }
+            }
+        }
+
+        // 3. Check backend QPS limits (if configured)
         BackendRateLimiter backendLimiter = backendLimiters.get(backendName);
         if (backendLimiter != null) {
             if (!backendLimiter.tryAcquireQps()) {
@@ -83,8 +103,8 @@ public class RateLimitManager {
             }
         }
 
-        // 3. Check client QPS limits (respects cascading: Backend -> Server -> -1)
-        ClientRateLimiter clientLimiter = getOrCreateClientLimiter(clientIp, backendName);
+        // 4. Check client QPS limits (respects cascading: Route -> Backend -> Server -> -1)
+        ClientRateLimiter clientLimiter = getOrCreateClientLimiter(clientIp, backendName, routeId);
         if (!clientLimiter.tryAcquireQps()) {
             log.warn("Client-level QPS limit exceeded for: {}", clientIp);
             return false;
@@ -97,30 +117,57 @@ public class RateLimitManager {
      * Try to acquire connection permits (called when creating a new ProxyConnection)
      * @param backendName backend service name
      * @param clientIp client IP address
+     * @param routeId route identifier (Route.getId())
      * @return true if connection permits are acquired, false otherwise
      */
-    public boolean tryAcquireConnection(String backendName, String clientIp) {
+    public boolean tryAcquireConnection(String backendName, String clientIp, String routeId) {
         // 1. Check global connection limit (handles -1 as unlimited, 0 as rejected)
         if (!globalConnectionLimiter.get().tryAcquire()) {
             log.warn("Global connection limit exceeded or rejected");
             return false;
         }
 
-        // 2. Check backend connection limits (if configured)
+        // 2. Check route-level connection limits
+        if (routeId != null) {
+            RouteRateLimiter routeLimiter = routeRateLimiters.get(routeId);
+            if (routeLimiter != null) {
+                if (!routeLimiter.tryAcquireConnection()) {
+                    log.warn("Route-level connection limit exceeded for: {}", routeId);
+                    globalConnectionLimiter.get().release();
+                    return false;
+                }
+            }
+        }
+
+        // 3. Check backend connection limits (if configured)
         BackendRateLimiter backendLimiter = backendLimiters.get(backendName);
         if (backendLimiter != null) {
             if (!backendLimiter.tryAcquireConnection()) {
                 log.warn("Backend-level connection limit exceeded for: {}", backendName);
                 globalConnectionLimiter.get().release();
+                // Release route connection permit
+                if (routeId != null) {
+                    RouteRateLimiter routeLimiter = routeRateLimiters.get(routeId);
+                    if (routeLimiter != null) {
+                        routeLimiter.releaseConnection();
+                    }
+                }
                 return false;
             }
         }
 
-        // 3. Check client connection limits
-        ClientRateLimiter clientLimiter = getOrCreateClientLimiter(clientIp, backendName);
+        // 4. Check client connection limits
+        ClientRateLimiter clientLimiter = getOrCreateClientLimiter(clientIp, backendName, routeId);
         if (!clientLimiter.tryAcquireConnection()) {
             log.warn("Client-level connection limit exceeded for: {}", clientIp);
             globalConnectionLimiter.get().release();
+            // Release route connection permit
+            if (routeId != null) {
+                RouteRateLimiter routeLimiter = routeRateLimiters.get(routeId);
+                if (routeLimiter != null) {
+                    routeLimiter.releaseConnection();
+                }
+            }
             if (backendLimiter != null) {
                 backendLimiter.release();
             }
@@ -134,10 +181,19 @@ public class RateLimitManager {
      * Release connection permits (called when ProxyConnection is closed)
      * @param backendName backend service name
      * @param clientIp client IP address
+     * @param routeId route identifier (can be null)
      */
-    public void releaseConnection(String backendName, String clientIp) {
+    public void releaseConnection(String backendName, String clientIp, String routeId) {
         // Release global connection permit
         globalConnectionLimiter.get().release();
+
+        // Release route-level connection permit
+        if (routeId != null) {
+            RouteRateLimiter routeLimiter = routeRateLimiters.get(routeId);
+            if (routeLimiter != null) {
+                routeLimiter.releaseConnection();
+            }
+        }
 
         // Release backend connection permit
         BackendRateLimiter backendLimiter = backendLimiters.get(backendName);
@@ -160,25 +216,39 @@ public class RateLimitManager {
 
     /**
      * Get or create client rate limiter with proper config resolution
-     * Cascading: Backend (!= -1) -> Server (!= -1) -> -1 (no limit)
+     * Cascading: Route (!= -1) -> Backend (!= -1) -> Server (!= -1) -> -1 (no limit)
      */
-    private ClientRateLimiter getOrCreateClientLimiter(String clientIp, String backendName) {
+    private ClientRateLimiter getOrCreateClientLimiter(String clientIp, String backendName, String routeId) {
         return clientLimiters.computeIfAbsent(clientIp, ip -> {
             RateLimitConfig serverConfig = serverRateLimitConfig.get();
             RateLimitConfig backendConfig = backendRateLimitConfigs.get(backendName);
+            RateLimitConfig routeConfig = routeRateLimitConfigs.get(routeId);
 
-            // Cascading: Backend (!= -1) -> Server (!= -1) -> -1 (no limit)
-            int maxQps = (backendConfig != null && backendConfig.isQpsPerClientLimited())
-                    ? backendConfig.getMaxQpsPerClient()
-                    : (serverConfig.isQpsPerClientLimited()
-                        ? serverConfig.getMaxQpsPerClient()
-                        : -1);
+            // Cascading: Route (!= -1) -> Backend (!= -1) -> Server (!= -1) -> -1 (no limit)
 
-            int maxConns = (backendConfig != null && backendConfig.isConnectionsPerClientLimited())
-                    ? backendConfig.getMaxConnectionsPerClient()
-                    : (serverConfig.isConnectionsPerClientLimited()
-                        ? serverConfig.getMaxConnectionsPerClient()
-                        : -1);
+            // QPS limit
+            int maxQps;
+            if (routeConfig != null && routeConfig.isQpsPerClientLimited()) {
+                maxQps = routeConfig.getMaxQpsPerClient();
+            } else if (backendConfig != null && backendConfig.isQpsPerClientLimited()) {
+                maxQps = backendConfig.getMaxQpsPerClient();
+            } else if (serverConfig.isQpsPerClientLimited()) {
+                maxQps = serverConfig.getMaxQpsPerClient();
+            } else {
+                maxQps = -1;
+            }
+
+            // Connections limit
+            int maxConns;
+            if (routeConfig != null && routeConfig.isConnectionsPerClientLimited()) {
+                maxConns = routeConfig.getMaxConnectionsPerClient();
+            } else if (backendConfig != null && backendConfig.isConnectionsPerClientLimited()) {
+                maxConns = backendConfig.getMaxConnectionsPerClient();
+            } else if (serverConfig.isConnectionsPerClientLimited()) {
+                maxConns = serverConfig.getMaxConnectionsPerClient();
+            } else {
+                maxConns = -1;
+            }
 
             log.debug("Creating client limiter for {}: QPS={}, Connections={}",
                     ip, maxQps == -1 ? "unlimited" : maxQps,
@@ -216,6 +286,38 @@ public class RateLimitManager {
             backendLimiters.remove(backendName);
             backendRateLimitConfigs.remove(backendName);
             log.info("Removed backend rate limiter for {} (no limit configured)", backendName);
+        }
+    }
+
+    /**
+     * Add or update route-level rate limit configuration
+     * @param routeId route identifier (Route.getId())
+     * @param routeConfig route configuration containing rate limit settings
+     */
+    public void updateRouteLimiter(String routeId, RouteConfig routeConfig) {
+        RateLimitConfig rateLimit = routeConfig.getRateLimit();
+        if (rateLimit != null) {
+            // Create RouteRateLimiter instance
+            RouteRateLimiter limiter = new RouteRateLimiter(routeId, rateLimit);
+            routeRateLimiters.put(routeId, limiter);
+
+            // Store route rate limit config for client limiter creation
+            routeRateLimitConfigs.put(routeId, rateLimit);
+
+            // Clear client limiters that use this route
+            clearClientLimiters();
+
+            log.info("Created route rate limiter for {}: QPS={}, Connections={}, ClientQPS={}, ClientConns={}",
+                    routeId,
+                    rateLimit.getMaxQps() == -1 ? "unlimited" : rateLimit.getMaxQps(),
+                    rateLimit.getMaxConnections() == -1 ? "unlimited" : rateLimit.getMaxConnections(),
+                    rateLimit.getMaxQpsPerClient() == -1 ? "unlimited" : rateLimit.getMaxQpsPerClient(),
+                    rateLimit.getMaxConnectionsPerClient() == -1 ? "unlimited" : rateLimit.getMaxConnectionsPerClient());
+        } else {
+            // Remove route limiter if config is null
+            routeRateLimiters.remove(routeId);
+            routeRateLimitConfigs.remove(routeId);
+            log.info("Removed route rate limiter for {} (no limit configured)", routeId);
         }
     }
 
@@ -289,6 +391,17 @@ public class RateLimitManager {
                 c1.getMaxConnections() == c2.getMaxConnections() &&
                 c1.getMaxQpsPerClient() == c2.getMaxQpsPerClient() &&
                 c1.getMaxConnectionsPerClient() == c2.getMaxConnectionsPerClient();
+    }
+
+    /**
+     * Clear all existing route rate limit configurations
+     * Called when routes are updated
+     */
+    public void clearRouteLimiters() {
+        int count = routeRateLimiters.size();
+        routeRateLimiters.clear();
+        routeRateLimitConfigs.clear();
+        log.info("Cleared {} route rate limiters", count);
     }
 
     /**

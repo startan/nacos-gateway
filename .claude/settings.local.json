@@ -5,7 +5,9 @@
       "Bash(mvn clean compile:*)",
       "Bash(git branch:*)",
       "Bash(find:*)",
-      "Bash(mvn clean install:*)"
+      "Bash(mvn clean install:*)",
+      "Bash(cat:*)",
+      "Bash(mvn test:*)"
     ]
   }
 }

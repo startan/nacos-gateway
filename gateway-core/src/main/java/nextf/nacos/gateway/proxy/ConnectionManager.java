@@ -37,7 +37,10 @@ public class ConnectionManager {
      */
     public void addConnection(ProxyConnection proxyConnection) throws LimitExceededException {
         // Check connection limit (should be checked once per TCP connection)
-        if (!rateLimitManager.tryAcquireConnection(proxyConnection.getBackend().getName(), proxyConnection.getClientIp())) {
+        if (!rateLimitManager.tryAcquireConnection(
+                proxyConnection.getBackend().getName(),
+                proxyConnection.getClientIp(),
+                proxyConnection.getRoute().getId())) {
             throw new LimitExceededException("Too Many Connections");
         }
 
@@ -69,7 +72,8 @@ public class ConnectionManager {
             // Release connection permit from rate limiter
             rateLimitManager.releaseConnection(
                 proxyConnection.getBackend().getName(),
-                proxyConnection.getClientIp()
+                proxyConnection.getClientIp(),
+                proxyConnection.getRoute() != null ? proxyConnection.getRoute().getId() : null
             );
 
             // Close all resources (HttpClient, notify load balancer, etc.)

@@ -159,6 +159,14 @@ public class GatewayServerManager implements EntityChangeListener {
             }
         }
 
+        // Update route rate limiters
+        if (config.getRoutes() != null) {
+            for (var routeConfig : config.getRoutes()) {
+                String routeId = routeConfig.getHost(); // Route.getId() returns hostPattern
+                rateLimitManager.updateRouteLimiter(routeId, routeConfig);
+            }
+        }
+
         log.info("Shared gateway components initialized");
     }
 

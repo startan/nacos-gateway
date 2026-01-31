@@ -13,7 +13,7 @@
 - **负载均衡**: 轮询、随机、最少连接三种策略
 - **优先级分组**: 端点优先级机制，高优先级全挂才降级
 - **健康检查**: HTTP/1 和 HTTP/2 探针，连续阈值机制
-- **限流保护**: QPS + 并发连接数限流，全局+路由级
+- **限流保护**: QPS + 并发连接数限流，Route/Backend/Server 三级级联配置
 - **配置热更新**: 文件监听实现配置动态加载，无需重启
 - **配置中心集成**: 支持 Nacos 配置中心，配置变更实时推送
 - **连接管理**: 每个客户端连接对应一个专属后端连接，客户端断开自动清理后端资源，防止连接泄漏
@@ -95,10 +95,42 @@ backends:
 
 ### 限流
 
-- 全局默认限制
-- 路由级可覆盖配置
-- 先检查全局，再检查路由级
-- 超限返回 HTTP 429
+支持多级限流配置，优先级从高到低：**Route → Backend → Server → -1 (无限制)**
+
+#### 限流级别
+- **Server 级别** (`server.rateLimit`)：全局默认限制
+- **Backend 级别** (`backends[].rateLimit`)：后端服务组限制
+- **Route 级别** (`routes[].rateLimit`)：路由级限制（最高优先级）
+
+#### 配置示例
+```yaml
+server:
+  rateLimit:
+    maxQpsPerClient: 10          # 默认值
+    maxConnectionsPerClient: 5
+
+routes:
+  - host: "api.example.com"
+    backend: api-service
+    rateLimit:                   # Route 级覆盖（最高优先级）
+      maxQpsPerClient: 100
+      maxConnectionsPerClient: 50
+
+  - host: "public.example.com"
+    backend: public-service
+    # 无 rateLimit - 使用 backend/server 配置
+
+backends:
+  - name: api-service
+    rateLimit:                   # Backend 级（中等优先级）
+      maxQpsPerClient: 50        # Route 未配置时使用
+      maxConnectionsPerClient: 20
+```
+
+#### 限流行为
+- 超限返回 HTTP 429 (Too Many Requests)
+- 值语义：`-1`=无限制, `0`=拒绝所有, `>0`=正常限流
+- 支持配置热更新，无需重启服务
 
 ### 配置文件路径协议
 
