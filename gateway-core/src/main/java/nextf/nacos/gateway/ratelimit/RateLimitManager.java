@@ -4,7 +4,7 @@ import nextf.nacos.gateway.config.BackendConfig;
 import nextf.nacos.gateway.config.GatewayConfig;
 import nextf.nacos.gateway.config.RateLimitConfig;
 import nextf.nacos.gateway.config.RouteConfig;
-import nextf.nacos.gateway.config.ServerConfig;
+import nextf.nacos.gateway.proxy.ProxyConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -179,11 +179,18 @@ public class RateLimitManager {
 
     /**
      * Release connection permits (called when ProxyConnection is closed)
-     * @param backendName backend service name
-     * @param clientIp client IP address
-     * @param routeId route identifier (can be null)
+     * @param proxyConnection the proxy connection being closed
      */
-    public void releaseConnection(String backendName, String clientIp, String routeId) {
+    public void releaseConnection(ProxyConnection proxyConnection) {
+        if (proxyConnection == null) {
+            log.warn("Attempted to release permits for null ProxyConnection");
+            return;
+        }
+
+        String backendName = proxyConnection.getBackend().getName();
+        String clientIp = proxyConnection.getClientIp();
+        String routeId = proxyConnection.getRoute() != null ? proxyConnection.getRoute().getId() : null;
+
         // Release global connection permit
         globalConnectionLimiter.get().release();
 

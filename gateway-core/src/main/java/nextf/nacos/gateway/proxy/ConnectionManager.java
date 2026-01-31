@@ -70,11 +70,7 @@ public class ConnectionManager {
         ProxyConnection proxyConnection = connections.remove(connection);
         if (proxyConnection != null) {
             // Release connection permit from rate limiter
-            rateLimitManager.releaseConnection(
-                proxyConnection.getBackend().getName(),
-                proxyConnection.getClientIp(),
-                proxyConnection.getRoute() != null ? proxyConnection.getRoute().getId() : null
-            );
+            rateLimitManager.releaseConnection(proxyConnection);
 
             // Close all resources (HttpClient, notify load balancer, etc.)
             proxyConnection.close();
