@@ -102,8 +102,10 @@ public class ConfigReloader {
      */
     private void updateRateLimiters(GatewayConfig newConfig) {
         boolean updated = false;
+
         // 1. Update server-level rate limit config (hot reload support)
-        if (newConfig.getServer() != null && newConfig.getServer().getRateLimit() != null) {
+        // Always call update when server config exists, even if rateLimit is null (to support reset to unlimited)
+        if (newConfig.getServer() != null) {
             rateLimitManager.updateServerRateLimitConfig(newConfig.getServer().getRateLimit());
             updated = true;
         }

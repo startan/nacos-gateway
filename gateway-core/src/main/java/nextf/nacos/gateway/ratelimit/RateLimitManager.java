@@ -330,13 +330,14 @@ public class RateLimitManager {
 
     /**
      * Update server-level rate limit configuration (hot reload support)
-     * @param newConfig the new server rate limit configuration
+     * @param newConfig the new server rate limit configuration (null means reset to unlimited)
      * @return true if update was successful, false otherwise
      */
     public boolean updateServerRateLimitConfig(RateLimitConfig newConfig) {
+        // If null config provided, reset to default (unlimited) values
         if (newConfig == null) {
-            log.warn("Attempted to update with null config, ignoring");
-            return false;
+            newConfig = new RateLimitConfig(); // All fields default to -1 (unlimited)
+            log.info("Server rate limit config reset to unlimited (null config provided)");
         }
 
         RateLimitConfig oldConfig = serverRateLimitConfig.get();
