@@ -270,30 +270,32 @@ public class RateLimitManager {
      */
     public void updateBackendLimiter(String backendName, BackendConfig backendConfig) {
         RateLimitConfig rateLimit = backendConfig.getRateLimit();
-        if (rateLimit != null) {
-            // Update backend-level rate limiter
-            BackendRateLimiter limiter = new BackendRateLimiter(
-                    backendName,
-                    rateLimit.getMaxQps(),
-                    rateLimit.getMaxConnections()
-            );
-            backendLimiters.put(backendName, limiter);
 
-            // Store backend rate limit config for client limiter creation
-            backendRateLimitConfigs.put(backendName, rateLimit);
-
-            log.info("Updated backend rate limiter for {}: QPS={}, Connections={}, ClientQPS={}, ClientConns={}",
-                    backendName,
-                    rateLimit.getMaxQps() == -1 ? "unlimited" : rateLimit.getMaxQps(),
-                    rateLimit.getMaxConnections() == -1 ? "unlimited" : rateLimit.getMaxConnections(),
-                    rateLimit.getMaxQpsPerClient() == -1 ? "unlimited" : rateLimit.getMaxQpsPerClient(),
-                    rateLimit.getMaxConnectionsPerClient() == -1 ? "unlimited" : rateLimit.getMaxConnectionsPerClient());
-        } else {
-            // Remove backend limiter if config is null
+        // If config is default (all -1), treat as "not configured" and remove limiter
+        if (rateLimit == null || rateLimit.isDefaultUnlimited()) {
             backendLimiters.remove(backendName);
             backendRateLimitConfigs.remove(backendName);
             log.info("Removed backend rate limiter for {} (no limit configured)", backendName);
+            return;
         }
+
+        // Update backend-level rate limiter
+        BackendRateLimiter limiter = new BackendRateLimiter(
+                backendName,
+                rateLimit.getMaxQps(),
+                rateLimit.getMaxConnections()
+        );
+        backendLimiters.put(backendName, limiter);
+
+        // Store backend rate limit config for client limiter creation
+        backendRateLimitConfigs.put(backendName, rateLimit);
+
+        log.info("Updated backend rate limiter for {}: QPS={}, Connections={}, ClientQPS={}, ClientConns={}",
+                backendName,
+                rateLimit.getMaxQps() == -1 ? "unlimited" : rateLimit.getMaxQps(),
+                rateLimit.getMaxConnections() == -1 ? "unlimited" : rateLimit.getMaxConnections(),
+                rateLimit.getMaxQpsPerClient() == -1 ? "unlimited" : rateLimit.getMaxQpsPerClient(),
+                rateLimit.getMaxConnectionsPerClient() == -1 ? "unlimited" : rateLimit.getMaxConnectionsPerClient());
     }
 
     /**
@@ -303,29 +305,31 @@ public class RateLimitManager {
      */
     public void updateRouteLimiter(String routeId, RouteConfig routeConfig) {
         RateLimitConfig rateLimit = routeConfig.getRateLimit();
-        if (rateLimit != null) {
-            // Create RouteRateLimiter instance
-            RouteRateLimiter limiter = new RouteRateLimiter(routeId, rateLimit);
-            routeRateLimiters.put(routeId, limiter);
 
-            // Store route rate limit config for client limiter creation
-            routeRateLimitConfigs.put(routeId, rateLimit);
-
-            // Clear client limiters that use this route
-            clearClientLimiters();
-
-            log.info("Created route rate limiter for {}: QPS={}, Connections={}, ClientQPS={}, ClientConns={}",
-                    routeId,
-                    rateLimit.getMaxQps() == -1 ? "unlimited" : rateLimit.getMaxQps(),
-                    rateLimit.getMaxConnections() == -1 ? "unlimited" : rateLimit.getMaxConnections(),
-                    rateLimit.getMaxQpsPerClient() == -1 ? "unlimited" : rateLimit.getMaxQpsPerClient(),
-                    rateLimit.getMaxConnectionsPerClient() == -1 ? "unlimited" : rateLimit.getMaxConnectionsPerClient());
-        } else {
-            // Remove route limiter if config is null
+        // If config is default (all -1), treat as "not configured" and remove limiter
+        if (rateLimit == null || rateLimit.isDefaultUnlimited()) {
             routeRateLimiters.remove(routeId);
             routeRateLimitConfigs.remove(routeId);
             log.info("Removed route rate limiter for {} (no limit configured)", routeId);
+            return;
         }
+
+        // Create RouteRateLimiter instance
+        RouteRateLimiter limiter = new RouteRateLimiter(routeId, rateLimit);
+        routeRateLimiters.put(routeId, limiter);
+
+        // Store route rate limit config for client limiter creation
+        routeRateLimitConfigs.put(routeId, rateLimit);
+
+        // Clear client limiters that use this route
+        clearClientLimiters();
+
+        log.info("Created route rate limiter for {}: QPS={}, Connections={}, ClientQPS={}, ClientConns={}",
+                routeId,
+                rateLimit.getMaxQps() == -1 ? "unlimited" : rateLimit.getMaxQps(),
+                rateLimit.getMaxConnections() == -1 ? "unlimited" : rateLimit.getMaxConnections(),
+                rateLimit.getMaxQpsPerClient() == -1 ? "unlimited" : rateLimit.getMaxQpsPerClient(),
+                rateLimit.getMaxConnectionsPerClient() == -1 ? "unlimited" : rateLimit.getMaxConnectionsPerClient());
     }
 
     /**

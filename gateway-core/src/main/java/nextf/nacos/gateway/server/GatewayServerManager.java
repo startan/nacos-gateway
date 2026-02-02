@@ -153,9 +153,7 @@ public class GatewayServerManager implements EntityChangeListener {
         // Update backend rate limiters
         if (config.getBackends() != null) {
             for (var backendConfig : config.getBackends()) {
-                if (backendConfig.hasCustomRateLimit()) {
-                    rateLimitManager.updateBackendLimiter(backendConfig.getName(), backendConfig);
-                }
+                rateLimitManager.updateBackendLimiter(backendConfig.getName(), backendConfig);
             }
         }
 

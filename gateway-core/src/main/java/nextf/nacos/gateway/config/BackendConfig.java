@@ -21,7 +21,7 @@ public class BackendConfig {
     private HealthProbeConfig probe;
 
     @JsonProperty("rateLimit")
-    private RateLimitConfig rateLimit;
+    private RateLimitConfig rateLimit = new RateLimitConfig();
 
     @JsonProperty("endpoints")
     private List<EndpointConfig> endpoints;
@@ -72,13 +72,6 @@ public class BackendConfig {
 
     public void setEndpoints(List<EndpointConfig> endpoints) {
         this.endpoints = endpoints;
-    }
-
-    /**
-     * Check if backend has custom rate limit configuration
-     */
-    public boolean hasCustomRateLimit() {
-        return rateLimit != null;
     }
 
     @Override

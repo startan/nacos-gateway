@@ -16,7 +16,7 @@ public class ServerConfig {
     private PortsConfig ports;
 
     @JsonProperty("rateLimit")
-    private RateLimitConfig rateLimit;
+    private RateLimitConfig rateLimit = new RateLimitConfig();
 
     public PortsConfig getPorts() {
         return ports;

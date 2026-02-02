@@ -14,7 +14,7 @@ public class RouteConfig {
     private String backend;
 
     @JsonProperty("rateLimit")
-    private RateLimitConfig rateLimit;
+    private RateLimitConfig rateLimit = new RateLimitConfig();
 
     public String getHost() {
         return host;
@@ -38,10 +38,6 @@ public class RouteConfig {
 
     public void setRateLimit(RateLimitConfig rateLimit) {
         this.rateLimit = rateLimit;
-    }
-
-    public boolean hasCustomRateLimit() {
-        return rateLimit != null;
     }
 
     @Override

@@ -66,6 +66,15 @@ public class RateLimitConfig {
     public boolean isQpsRejected() { return maxQps == 0; }
     public boolean isConnectionsRejected() { return maxConnections == 0; }
 
+    /**
+     * Check if this config is exactly the default (all -1, unlimited)
+     * @return true if all fields are -1
+     */
+    public boolean isDefaultUnlimited() {
+        return maxQps == -1 && maxConnections == -1 &&
+               maxQpsPerClient == -1 && maxConnectionsPerClient == -1;
+    }
+
     @Override
     public String toString() {
         return "RateLimitConfig{" +
