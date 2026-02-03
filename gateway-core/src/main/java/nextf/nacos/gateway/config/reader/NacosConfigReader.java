@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -43,8 +44,8 @@ public class NacosConfigReader implements ConfigFileReader {
                 throw new IOException("Configuration not found in Nacos: " + urlConfig);
             }
 
-            log.info("Successfully loaded config from Nacos: dataId={}, group={}, namespace={}",
-                urlConfig.getDataId(), urlConfig.getGroup(), urlConfig.getNamespace());
+            log.info("Successfully loaded config from Nacos: dataId={}, group={}",
+                urlConfig.getDataId(), urlConfig.getGroup());
 
         } catch (NacosException e) {
             throw new IOException("Failed to initialize Nacos config reader: " + e.getMessage(), e);
@@ -108,8 +109,29 @@ public class NacosConfigReader implements ConfigFileReader {
 
     @Override
     public String getSourceDescription() {
-        return String.format("nacos://%s?group=%s&namespace=%s&serverAddr=%s",
-            urlConfig.getDataId(), urlConfig.getGroup(),
-            urlConfig.getNamespace(), urlConfig.getServerAddr());
+        // Build URL in new format: nacos://dataId:group?params
+        StringBuilder sb = new StringBuilder("nacos://");
+        sb.append(urlConfig.getDataId());
+
+        // Add group if not default
+        if (!"DEFAULT_GROUP".equals(urlConfig.getGroup())) {
+            sb.append(":").append(urlConfig.getGroup());
+        }
+
+        // Add query parameters if any
+        Properties props = urlConfig.getProperties();
+        if (!props.isEmpty()) {
+            sb.append("?");
+            boolean first = true;
+            for (String key : props.stringPropertyNames()) {
+                if (!first) {
+                    sb.append("&");
+                }
+                sb.append(key).append("=").append(props.getProperty(key));
+                first = false;
+            }
+        }
+
+        return sb.toString();
     }
 }

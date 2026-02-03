@@ -63,20 +63,24 @@
 3. **nacos:// 协议**
    - 从 Nacos 配置中心读取配置
    - 支持实时推送更新（基于 gRPC 长连接）
-   - 支持两种认证模式：
-     - AK/SK 模式：`auth-mode=ak/sk&accessKey=<key>&secretKey=<secret>`
-     - 用户名/密码模式：`auth-mode=username/password&username=<user>&password=<pass>`
    - URL 格式：
      ```
-     nacos://<dataId>?group=<group>&namespace=<namespace>&serverAddr=<addr1>,<addr2>&auth-mode=<mode>&...
+     nacos://<dataId>[:<group>]?<query-parameters>
      ```
+   - 说明：
+     - `dataId`：必填
+     - `group`：可选，使用 `:` 分隔。未指定时使用默认值 `DEFAULT_GROUP`
+     - 所有其他参数直接透传给 Nacos Client
    - 示例：
      ```bash
+     # 基础配置（使用默认 group）
+     java -jar nacos-gateway.jar -c "nacos://nacos-gateway.yaml?serverAddr=127.0.0.1:8848"
+
      # AK/SK 认证
-     java -jar nacos-gateway.jar -c "nacos://nacos-gateway.yaml?group=gateway-group&namespace=dev&serverAddr=127.0.0.1:8848&auth-mode=ak/sk&accessKey=yourKey&secretKey=yourSecret"
+     java -jar nacos-gateway.jar -c "nacos://nacos-gateway.yaml:gateway-group?namespace=dev&serverAddr=127.0.0.1:8848&accessKey=yourKey&secretKey=yourSecret"
 
      # 用户名/密码认证
-     java -jar nacos-gateway.jar -c "nacos://nacos-gateway.yaml?group=gateway-group&namespace=prod&serverAddr=192.168.1.100:8848,192.168.1.101:8848&auth-mode=username/password&username=nacos&password=nacos"
+     java -jar nacos-gateway.jar -c "nacos://nacos-gateway.yaml:prod?namespace=prod&serverAddr=192.168.1.100:8848,192.168.1.101:8848&username=nacos&password=nacos"
      ```
 
 ### 配置文件结构

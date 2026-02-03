@@ -46,7 +46,17 @@ java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar /path/to/config.yam
 java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar classpath://config.yaml
 
 # 使用 Nacos 配置中心（nacos:// 协议）
-java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml?group=gateway&serverAddr=127.0.0.1:8848&auth-mode=ak/sk&accessKey=yourKey&secretKey=yourSecret"
+# 基础配置
+java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml?serverAddr=127.0.0.1:8848"
+
+# 使用自定义分组
+java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml:my-group?serverAddr=127.0.0.1:8848"
+
+# AK/SK 认证
+java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml:my-group?namespace=dev&serverAddr=127.0.0.1:8848&accessKey=yourKey&secretKey=yourSecret"
+
+# 用户名/密码认证
+java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml:prod?namespace=prod&serverAddr=127.0.0.1:8848&username=nacos&password=nacos"
 ```
 
 ### 配置示例

@@ -1406,7 +1406,7 @@ java -jar gateway-launcher-1.0.0.jar classpath://nacos-gateway.yaml
 
 **URL 格式**：
 ```
-nacos://<dataId>?group=<group>&namespace=<namespace>&serverAddr=<serverAddr1>,<serverAddr2>&auth-mode=<mode>&...
+nacos://<dataId>[:<group>]?<query-parameters>
 ```
 
 **参数说明**：
@@ -1414,42 +1414,33 @@ nacos://<dataId>?group=<group>&namespace=<namespace>&serverAddr=<serverAddr1>,<s
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | dataId | 是 | 配置的唯一标识符 |
-| group | 否 | 配置所属分组，默认：DEFAULT_GROUP |
+| group | 否 | 配置所属分组，使用 `:` 分隔，默认：DEFAULT_GROUP |
 | namespace | 否 | 配置所属命名空间，默认：空字符串 |
 | serverAddr | 是 | Nacos 服务器地址，多个地址用逗号分隔 |
-| auth-mode | 否 | 认证模式：ak/sk 或 username/password |
-| accessKey | 否 | AK/SK 模式的访问密钥 |
-| secretKey | 否 | AK/SK 模式的密钥 |
-| username | 否 | 用户名/密码模式的用户名 |
-| password | 否 | 用户名/密码模式的密码 |
+| accessKey | 否 | AK/SK 认证的访问密钥 |
+| secretKey | 否 | AK/SK 认证的密钥 |
+| username | 否 | 用户名/密码认证的用户名 |
+| password | 否 | 用户名/密码认证的密码 |
 
 **使用示例**：
 
 ```bash
+# 基础配置（使用默认 group 和 namespace）
+java -jar gateway-launcher-1.0.0.jar \
+  "nacos://config.yaml?serverAddr=127.0.0.1:8848"
+
 # AK/SK 认证模式
 java -jar gateway-launcher-1.0.0.jar \
-  "nacos://nacos-gateway.yaml?group=gateway-group&namespace=dev&serverAddr=127.0.0.1:8848&auth-mode=ak/sk&accessKey=yourAccessKey&secretKey=yourSecretKey"
+  "nacos://nacos-gateway.yaml:gateway-group?namespace=dev&serverAddr=127.0.0.1:8848&accessKey=yourAccessKey&secretKey=yourSecretKey"
 
 # 用户名/密码认证模式
 java -jar gateway-launcher-1.0.0.jar \
-  "nacos://nacos-gateway.yaml?group=gateway-group&namespace=prod&serverAddr=192.168.1.100:8848,192.168.1.101:8848&auth-mode=username/password&username=nacos&password=nacos"
+  "nacos://nacos-gateway.yaml:prod?namespace=prod&serverAddr=192.168.1.100:8848,192.168.1.101:8848&username=nacos&password=nacos"
 
-# 使用默认分组和命名空间
+# 指定分组但使用默认 namespace
 java -jar gateway-launcher-1.0.0.jar \
-  "nacos://config.yaml?serverAddr=127.0.0.1:8848"
+  "nacos://config.yaml:my-group?serverAddr=127.0.0.1:8848"
 ```
-
-**认证模式说明**：
-
-1. **AK/SK 模式**（推荐用于生产环境）
-   - 使用 Nacos 访问密钥对
-   - 安全性高
-   - 适合自动化部署
-
-2. **用户名/密码模式**
-   - 使用 Nacos 用户名和密码
-   - 配置简单
-   - 适合开发测试环境
 
 **优势**：
 - 配置集中管理

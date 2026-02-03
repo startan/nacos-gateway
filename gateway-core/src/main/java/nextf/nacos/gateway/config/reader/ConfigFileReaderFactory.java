@@ -19,7 +19,7 @@ public class ConfigFileReaderFactory {
      * @return ConfigFileReader instance
      */
     public static ConfigFileReader getReader(String configPath, Vertx vertx) throws Exception {
-        if (configPath == null || configPath.isEmpty()) {
+        if (configPath == null || configPath.trim().isEmpty()) {
             throw new IllegalArgumentException("Config path cannot be null or empty");
         }
 
