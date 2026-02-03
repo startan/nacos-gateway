@@ -1,0 +1,20 @@
+server:
+  ports:
+    apiV1: 18848
+    apiV2: 19848
+    apiConsole: 18080
+
+routes:
+  - host: "*.nacos.io"
+    backend: unknown-backend
+
+backends:
+  - name: test-backend
+    ports:
+      apiV1: 8848
+      apiV2: 9848
+      apiConsole: 8080
+    loadBalance: round-robin
+    endpoints:
+      - host: 10.0.0.1
+        priority: 10

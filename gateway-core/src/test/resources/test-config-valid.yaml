@@ -1,0 +1,68 @@
+server:
+  ports:
+    apiV1: 18848
+    apiV2: 19848
+    apiConsole: 18080
+  rateLimit:
+    maxQps: 2000
+    maxConnections: 10000
+    maxQpsPerClient: 10
+    maxConnectionsPerClient: 5
+  logging:
+    level: INFO
+    verbose: false
+
+routes:
+  - host: "*.nacos.io"
+    backend: group1-service
+  - host: "group2.nacos.io"
+    backend: group2-service
+
+backends:
+  - name: group1-service
+    ports:
+      apiV1: 8848
+      apiV2: 9848
+      apiConsole: 8080
+    probe:
+      enabled: true
+      type: http
+      path: /health
+      periodSeconds: 10
+      timeoutSeconds: 1
+      successThreshold: 1
+      failureThreshold: 3
+    loadBalance: round-robin
+    rateLimit:
+      maxQps: 1000
+      maxConnections: 2000
+      maxQpsPerClient: 10
+      maxConnectionsPerClient: 5
+    endpoints:
+      - host: 10.0.1.1
+        priority: 10
+      - host: 10.0.1.2
+        priority: 10
+      - host: 10.0.1.3
+        priority: 20
+
+  - name: group2-service
+    ports:
+      apiV1: 8848
+      apiV2: 9848
+      apiConsole: 8080
+    loadBalance: random
+    endpoints:
+      - host: 10.0.2.1
+        priority: 10
+      - host: 10.0.2.2
+        priority: 20
+
+timeout:
+  connectTimeoutSeconds: 10
+  requestTimeoutSeconds: 30
+  idleTimeoutSeconds: 60
+
+management:
+  host: localhost
+  port: 19090
