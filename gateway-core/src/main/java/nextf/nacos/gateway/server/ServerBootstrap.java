@@ -50,7 +50,8 @@ public class ServerBootstrap {
                 configLoader,
                 gatewayServerManager.getRegistry(),
                 gatewayServerManager.getRateLimitManager(),
-                configFileReader  // new parameter
+                configFileReader,
+                gatewayServerManager.getAccessLogger()
         );
 
         // 7. Initialize reloader and set current configuration

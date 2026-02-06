@@ -1,54 +1,93 @@
 package nextf.nacos.gateway.logging;
 
-import org.slf4j.Logger;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.Appender;
+import nextf.nacos.gateway.config.AccessLogConfig;
 import org.slf4j.LoggerFactory;
-import nextf.nacos.gateway.config.LoggingConfig;
-
-import java.time.LocalDateTime;
 
 /**
- * Access logger
+ * Access logger - decoupled from logback.xml
+ * Uses programmatic Logback configuration
  */
 public class AccessLogger {
 
-    private static final Logger log = LoggerFactory.getLogger(AccessLogger.class);
+    private volatile AccessLogConfig config;
+    private volatile Logger accessLogger;
+    private final LoggerContext loggerContext;
+    private volatile Appender<ILoggingEvent> appender;
 
-    private final boolean verbose;
-    private final LogFormatter formatter;
-
-    public AccessLogger(LoggingConfig config) {
-        this.verbose = config.isVerbose();
-
-        if ("json".equalsIgnoreCase(config.getFormat())) {
-            this.formatter = new JsonLogFormatter();
-        } else {
-            this.formatter = new TextLogFormatter();
-        }
+    public AccessLogger(AccessLogConfig config) {
+        this.loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        reconfigure(config);
     }
 
-    public void logRequest(String method, String path, int status, long duration,
-                          String clientIp, String backend, String endpoint) {
-        if (!verbose) {
+    /**
+     * Log access
+     */
+    public void logAccess(AccessLogContext context) {
+        if (!config.isEnabled() || accessLogger == null) {
             return;
         }
 
-        AccessLog accessLog = new AccessLog(
-                LocalDateTime.now(),
-                "INFO",
-                method,
-                path,
-                status,
-                duration,
-                clientIp,
-                backend,
-                endpoint
-        );
-
-        String formatted = formatter.format(accessLog);
-        log.info("{}", formatted);
+        AccessLogEvent event = new AccessLogEvent(context);
+        accessLogger.callAppenders(event);
     }
 
-    public boolean isVerbose() {
-        return verbose;
+    /**
+     * Reconfigure with new config (for hot reload)
+     */
+    public synchronized void reconfigure(AccessLogConfig newConfig) {
+        // Stop old appender
+        if (appender != null) {
+            AccessLogAppenderFactory.stopAppender(appender);
+        }
+
+        this.config = newConfig;
+
+        if (newConfig.isEnabled()) {
+            // Create new appender
+            this.appender = AccessLogAppenderFactory.createAppender(newConfig, loggerContext);
+
+            // Create or get access logger
+            Logger logger = loggerContext.exists("AccessLog");
+            if (logger == null) {
+                logger = loggerContext.getLogger("AccessLog");
+            }
+            logger.setAdditive(false); // Don't propagate to root logger
+            logger.detachAndStopAllAppenders();
+            logger.addAppender(this.appender);
+
+            this.accessLogger = logger;
+        } else {
+            this.accessLogger = null;
+            this.appender = null;
+        }
+    }
+
+    /**
+     * Check if access logging is enabled
+     */
+    public boolean isEnabled() {
+        return config.isEnabled();
+    }
+
+    /**
+     * Get current config
+     */
+    public AccessLogConfig getConfig() {
+        return config;
+    }
+
+    /**
+     * Stop the logger and release resources
+     */
+    public synchronized void stop() {
+        if (appender != null) {
+            AccessLogAppenderFactory.stopAppender(appender);
+            appender = null;
+        }
+        accessLogger = null;
     }
 }

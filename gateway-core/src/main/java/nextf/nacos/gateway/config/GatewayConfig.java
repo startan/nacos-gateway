@@ -20,8 +20,8 @@ public class GatewayConfig {
     @JsonProperty("timeout")
     private TimeoutConfig timeout;
 
-    @JsonProperty("logging")
-    private LoggingConfig logging;
+    @JsonProperty("accessLog")
+    private AccessLogConfig accessLog;
 
     @JsonProperty("management")
     private ManagementConfig management;
@@ -58,12 +58,12 @@ public class GatewayConfig {
         this.timeout = timeout;
     }
 
-    public LoggingConfig getLogging() {
-        return logging;
+    public AccessLogConfig getAccessLog() {
+        return accessLog;
     }
 
-    public void setLogging(LoggingConfig logging) {
-        this.logging = logging;
+    public void setAccessLog(AccessLogConfig accessLog) {
+        this.accessLog = accessLog;
     }
 
     public ManagementConfig getManagement() {
@@ -81,7 +81,7 @@ public class GatewayConfig {
                 ", routes=" + routes +
                 ", backends=" + backends +
                 ", timeout=" + timeout +
-                ", logging=" + logging +
+                ", accessLog=" + accessLog +
                 ", management=" + management +
                 '}';
     }

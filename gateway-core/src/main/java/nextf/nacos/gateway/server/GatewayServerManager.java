@@ -17,6 +17,7 @@ import nextf.nacos.gateway.proxy.ConnectionManager;
 import nextf.nacos.gateway.ratelimit.RateLimitManager;
 import nextf.nacos.gateway.registry.GatewayRegistry;
 import nextf.nacos.gateway.route.RouteMatcher;
+import nextf.nacos.gateway.logging.AccessLogger;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -41,6 +42,7 @@ public class GatewayServerManager implements EntityChangeListener {
     private HealthCheckManager healthCheckManager;
     private RateLimitManager rateLimitManager;
     private HealthEndpoint healthEndpoint;
+    private AccessLogger accessLogger;
 
     public GatewayServerManager(Vertx vertx, GatewayConfig config) {
         this.vertx = vertx;
@@ -71,7 +73,8 @@ public class GatewayServerManager implements EntityChangeListener {
                 endpointSelector,
                 connectionManager,
                 rateLimitManager,
-                healthEndpoint
+                healthEndpoint,
+                accessLogger
             );
 
             servers.put(portType, server);
@@ -102,6 +105,10 @@ public class GatewayServerManager implements EntityChangeListener {
 
         if (connectionManager != null) {
             connectionManager.closeAll();
+        }
+
+        if (accessLogger != null) {
+            accessLogger.stop();
         }
 
         log.info("=================================================");
@@ -148,6 +155,15 @@ public class GatewayServerManager implements EntityChangeListener {
         if (mgmtConfig != null && mgmtConfig.getHealth() != null && mgmtConfig.getHealth().isEnabled()) {
             healthEndpoint = new HealthEndpoint(mgmtConfig.getHealth().getPath());
             log.info("Health endpoint enabled: {}", healthEndpoint.getPath());
+        }
+
+        // Initialize access logger
+        if (config.getAccessLog() != null) {
+            accessLogger = new AccessLogger(config.getAccessLog());
+            log.info("Access logger {}",
+                    accessLogger.isEnabled() ? "enabled" : "disabled");
+        } else {
+            accessLogger = new AccessLogger(new nextf.nacos.gateway.config.AccessLogConfig());
         }
 
         // Update backend rate limiters
@@ -212,5 +228,9 @@ public class GatewayServerManager implements EntityChangeListener {
 
     public GatewayServer getServer(PortType portType) {
         return servers.get(portType);
+    }
+
+    public AccessLogger getAccessLogger() {
+        return accessLogger;
     }
 }

@@ -6,6 +6,7 @@ import nextf.nacos.gateway.config.reader.ConfigFileReader;
 import nextf.nacos.gateway.proxy.ConnectionManager;
 import nextf.nacos.gateway.ratelimit.RateLimitManager;
 import nextf.nacos.gateway.registry.GatewayRegistry;
+import nextf.nacos.gateway.logging.AccessLogger;
 
 /**
  * Configuration reloader for hot reloading
@@ -19,17 +20,20 @@ public class ConfigReloader {
     private final GatewayRegistry registry;
     private final RateLimitManager rateLimitManager;
     private final ConfigFileReader configFileReader;
+    private final AccessLogger accessLogger;
 
     private GatewayConfig currentConfig;
 
     public ConfigReloader(ConfigLoader configLoader,
                          GatewayRegistry registry,
                          RateLimitManager rateLimitManager,
-                         ConfigFileReader configFileReader) {
+                         ConfigFileReader configFileReader,
+                         AccessLogger accessLogger) {
         this.configLoader = configLoader;
         this.registry = registry;
         this.rateLimitManager = rateLimitManager;
         this.configFileReader = configFileReader;
+        this.accessLogger = accessLogger;
     }
 
     public void setCurrentConfig(GatewayConfig config) {
@@ -67,7 +71,10 @@ public class ConfigReloader {
             // 6. Update rate limit configuration
             updateRateLimiters(newConfig);
 
-            // 7. Update current configuration
+            // 7. Update access log configuration
+            updateAccessLogger(newConfig);
+
+            // 8. Update current configuration
             currentConfig = newConfig;
 
             log.info("Configuration reloaded successfully");
@@ -131,6 +138,17 @@ public class ConfigReloader {
             rateLimitManager.clearClientLimiters();
         }
         log.info("Updated rate limiters (server, backend and route level)");
+    }
+
+    /**
+     * Update access logger configuration
+     */
+    private void updateAccessLogger(GatewayConfig newConfig) {
+        if (newConfig.getAccessLog() != null && accessLogger != null) {
+            accessLogger.reconfigure(newConfig.getAccessLog());
+            log.info("Access logger reconfigured: {}",
+                    accessLogger.isEnabled() ? "enabled" : "disabled");
+        }
     }
 
     public GatewayConfig getCurrentConfig() {

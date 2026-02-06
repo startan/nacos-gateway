@@ -27,6 +27,7 @@ import nextf.nacos.gateway.ratelimit.LimitExceededException;
 import nextf.nacos.gateway.ratelimit.RateLimitManager;
 import nextf.nacos.gateway.registry.GatewayRegistry;
 import nextf.nacos.gateway.route.Route;
+import nextf.nacos.gateway.logging.AccessLogger;
 
 import java.util.List;
 
@@ -51,6 +52,7 @@ public class GatewayServer {
     private final ConnectionManager connectionManager;
     private final RateLimitManager rateLimitManager;
     private final HealthEndpoint healthEndpoint;
+    private final AccessLogger accessLogger;
 
     /**
      * Constructor for multi-port gateway
@@ -63,6 +65,7 @@ public class GatewayServer {
      * @param connectionManager Shared connection manager
      * @param rateLimitManager Shared rate limit manager
      * @param healthEndpoint Shared health endpoint
+     * @param accessLogger Shared access logger
      */
     public GatewayServer(
             Vertx vertx,
@@ -73,7 +76,8 @@ public class GatewayServer {
             EndpointSelector endpointSelector,
             ConnectionManager connectionManager,
             RateLimitManager rateLimitManager,
-            HealthEndpoint healthEndpoint) {
+            HealthEndpoint healthEndpoint,
+            AccessLogger accessLogger) {
         this.vertx = vertx;
         this.config = config;
         this.portType = portType;
@@ -83,6 +87,7 @@ public class GatewayServer {
         this.connectionManager = connectionManager;
         this.rateLimitManager = rateLimitManager;
         this.healthEndpoint = healthEndpoint;
+        this.accessLogger = accessLogger;
     }
 
     public void start(Handler<HttpServer> handler) {
@@ -242,24 +247,18 @@ public class GatewayServer {
 
         // Use the connection's HttpClient and get the correct port for this portType
         try {
-            Endpoint endpoint = proxyConnection.getEndpoint();
-            String backendHost = endpoint.getHost();
-            int backendPort = endpoint.getPortForType(portType);
-
             switch (portType) {
                 case API_V1, API_CONSOLE -> {
                     HttpProxyHandler httpHandler = new HttpProxyHandler(
-                            proxyConnection.getHttpClient(),
-                            backendHost,
-                            backendPort
+                            proxyConnection,
+                            accessLogger
                     );
                     httpHandler.handle(request);
                 }
                 case API_V2 -> {
                     GrpcProxyHandler grpcHandler = new GrpcProxyHandler(
-                            proxyConnection.getHttpClient(),
-                            backendHost,
-                            backendPort
+                            proxyConnection,
+                            accessLogger
                     );
                     grpcHandler.handle(request);
                 }

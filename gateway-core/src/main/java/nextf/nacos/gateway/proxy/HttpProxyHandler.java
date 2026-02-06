@@ -5,9 +5,15 @@ import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import nextf.nacos.gateway.logging.AccessLogger;
+import nextf.nacos.gateway.logging.AccessLogContext;
+import nextf.nacos.gateway.model.Backend;
+import nextf.nacos.gateway.model.Endpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import nextf.nacos.gateway.config.TimeoutConfig;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * HTTP/1 and HTTP/2 proxy handler
@@ -19,14 +25,22 @@ public class HttpProxyHandler implements ProxyHandler {
     private final HttpClient httpClient;
     private final String host;
     private final int port;
+    private final AccessLogger accessLogger;
+    private final Backend backend;
+    private final Endpoint endpoint;
 
     /**
-     * Constructor with host and port
+     * Simplified constructor - using ProxyConnection
+     * @param proxyConnection object containing all connection-related information
+     * @param accessLogger access logger
      */
-    public HttpProxyHandler(HttpClient httpClient, String host, int port) {
-        this.httpClient = httpClient;
-        this.host = host;
-        this.port = port;
+    public HttpProxyHandler(ProxyConnection proxyConnection, AccessLogger accessLogger) {
+        this.httpClient = proxyConnection.getHttpClient();
+        this.host = proxyConnection.getEndpoint().getHost();
+        this.port = proxyConnection.getBackendPort();
+        this.accessLogger = accessLogger;
+        this.backend = proxyConnection.getBackend();
+        this.endpoint = proxyConnection.getEndpoint();
     }
 
     @Override
@@ -39,6 +53,16 @@ public class HttpProxyHandler implements ProxyHandler {
                 request.method(),
                 request.uri(),
                 address);
+
+        // Record start time for access log
+        long startTime = System.currentTimeMillis();
+        String clientIp = request.remoteAddress().host();
+
+        // Collect request headers for access log
+        Map<String, String> requestHeaders = new HashMap<>();
+        if (accessLogger != null && accessLogger.isEnabled()) {
+            request.headers().forEach(entry -> requestHeaders.put(entry.getKey(), entry.getValue()));
+        }
 
         // Create proxy request
         httpClient.request(
@@ -67,7 +91,8 @@ public class HttpProxyHandler implements ProxyHandler {
 
                 // Handle proxy response
                 proxyRequest.response()
-                    .onSuccess(proxyResponse -> handleProxyResponse(request, proxyResponse, response, address))
+                    .onSuccess(proxyResponse -> handleProxyResponse(request, proxyResponse, response,
+                            address, startTime, clientIp, requestHeaders))
                     .onFailure(t -> {
                         log.error("Response from backend {} failed: {}", address, t.getMessage());
                         if (!response.ended()) {
@@ -93,7 +118,10 @@ public class HttpProxyHandler implements ProxyHandler {
     private void handleProxyResponse(HttpServerRequest clientRequest,
                                      HttpClientResponse proxyResponse,
                                      HttpServerResponse clientResponse,
-                                     String address) {
+                                     String address,
+                                     long startTime,
+                                     String clientIp,
+                                     Map<String, String> requestHeaders) {
         // Set status code
         clientResponse.setStatusCode(proxyResponse.statusCode());
         clientResponse.setStatusMessage(proxyResponse.statusMessage());
@@ -105,12 +133,46 @@ public class HttpProxyHandler implements ProxyHandler {
             }
         });
 
+        // Collect response headers for access log
+        Map<String, String> responseHeaders = new HashMap<>();
+        if (accessLogger != null && accessLogger.isEnabled()) {
+            proxyResponse.headers().forEach(entry -> responseHeaders.put(entry.getKey(), entry.getValue()));
+        }
+
+        // Track bytes sent for access log
+        final long[] bytesSent = {0};
+
         // Handle response body
-        proxyResponse.handler(clientResponse::write);
+        proxyResponse.handler(buffer -> {
+            clientResponse.write(buffer);
+            if (accessLogger != null && accessLogger.isEnabled()) {
+                bytesSent[0] += buffer.length();
+            }
+        });
 
         proxyResponse.endHandler(v -> {
             clientResponse.end();
             log.debug("Response from {}: status {}", address, proxyResponse.statusCode());
+
+            // Log access
+            if (accessLogger != null && accessLogger.isEnabled()) {
+                long duration = System.currentTimeMillis() - startTime;
+                AccessLogContext context = AccessLogContext.builder()
+                        .method(clientRequest.method().name())
+                        .uri(clientRequest.path())
+                        .queryString(clientRequest.query())
+                        .protocol(clientRequest.version().toString())
+                        .status(proxyResponse.statusCode())
+                        .bytesSent(bytesSent[0])
+                        .durationMs(duration)
+                        .clientIp(clientIp)
+                        .backend(backend != null ? backend.getName() : "")
+                        .endpoint(endpoint != null ? endpoint.getAddress() : address)
+                        .requestHeaders(requestHeaders)
+                        .responseHeaders(responseHeaders)
+                        .build();
+                accessLogger.logAccess(context);
+            }
         });
 
         proxyResponse.exceptionHandler(t -> {

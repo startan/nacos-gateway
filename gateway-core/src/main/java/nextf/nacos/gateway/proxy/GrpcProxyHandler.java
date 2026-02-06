@@ -5,9 +5,15 @@ import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import nextf.nacos.gateway.logging.AccessLogger;
+import nextf.nacos.gateway.logging.AccessLogContext;
+import nextf.nacos.gateway.model.Backend;
+import nextf.nacos.gateway.model.Endpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import nextf.nacos.gateway.config.TimeoutConfig;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * gRPC proxy handler (HTTP/2 complete passthrough)
@@ -20,14 +26,22 @@ public class GrpcProxyHandler implements ProxyHandler {
     private final HttpClient httpClient;
     private final String host;
     private final int port;
+    private final AccessLogger accessLogger;
+    private final Backend backend;
+    private final Endpoint endpoint;
 
     /**
-     * Constructor with host and port
+     * Simplified constructor - using ProxyConnection
+     * @param proxyConnection object containing all connection-related information
+     * @param accessLogger access logger
      */
-    public GrpcProxyHandler(HttpClient httpClient, String host, int port) {
-        this.httpClient = httpClient;
-        this.host = host;
-        this.port = port;
+    public GrpcProxyHandler(ProxyConnection proxyConnection, AccessLogger accessLogger) {
+        this.httpClient = proxyConnection.getHttpClient();
+        this.host = proxyConnection.getEndpoint().getHost();
+        this.port = proxyConnection.getBackendPort();
+        this.accessLogger = accessLogger;
+        this.backend = proxyConnection.getBackend();
+        this.endpoint = proxyConnection.getEndpoint();
     }
 
     public static boolean isGrpcRequest(HttpServerRequest request) {
@@ -39,6 +53,16 @@ public class GrpcProxyHandler implements ProxyHandler {
     public void handle(HttpServerRequest request) {
         HttpServerResponse response = request.response();
         request.pause();
+
+        // Record start time for access log
+        long startTime = System.currentTimeMillis();
+        String clientIp = request.remoteAddress().host();
+
+        // Collect request headers for access log
+        Map<String, String> requestHeaders = new HashMap<>();
+        if (accessLogger != null && accessLogger.isEnabled()) {
+            request.headers().forEach(entry -> requestHeaders.put(entry.getKey(), entry.getValue()));
+        }
 
         // Create HTTP/2 proxy request
         httpClient.request(
@@ -67,7 +91,8 @@ public class GrpcProxyHandler implements ProxyHandler {
 
                 // Handle proxy response
                 proxyRequest.response()
-                    .onSuccess(proxyResponse -> handleGrpcResponse(request, proxyResponse, response))
+                    .onSuccess(proxyResponse -> handleGrpcResponse(request, proxyResponse, response,
+                            startTime, clientIp, requestHeaders))
                     .onFailure(t -> {
                         log.error("Response from gRPC backend {}:{} failed: {}", host, port, t.getMessage());
                         if (!response.ended()) {
@@ -88,7 +113,10 @@ public class GrpcProxyHandler implements ProxyHandler {
 
     private void handleGrpcResponse(HttpServerRequest clientRequest,
                                      HttpClientResponse proxyResponse,
-                                     HttpServerResponse clientResponse) {
+                                     HttpServerResponse clientResponse,
+                                     long startTime,
+                                     String clientIp,
+                                     Map<String, String> requestHeaders) {
         log.debug("Received gRPC response from {}:{} status {}", host, port, proxyResponse.statusCode());
 
         // Copy all headers (complete passthrough)
@@ -100,6 +128,15 @@ public class GrpcProxyHandler implements ProxyHandler {
             }
         });
 
+        // Collect response headers for access log
+        Map<String, String> responseHeaders = new HashMap<>();
+        if (accessLogger != null && accessLogger.isEnabled()) {
+            proxyResponse.headers().forEach(entry -> responseHeaders.put(entry.getKey(), entry.getValue()));
+        }
+
+        // Track bytes sent for access log
+        final long[] bytesSent = {0};
+
         // Handle backpressure for streaming
         proxyResponse.handler(buffer -> {
             if (clientResponse.writeQueueFull()) {
@@ -107,6 +144,9 @@ public class GrpcProxyHandler implements ProxyHandler {
                 clientResponse.drainHandler(v -> proxyResponse.resume());
             }
             clientResponse.write(buffer);
+            if (accessLogger != null && accessLogger.isEnabled()) {
+                bytesSent[0] += buffer.length();
+            }
         });
 
         proxyResponse.endHandler(v -> {
@@ -120,6 +160,26 @@ public class GrpcProxyHandler implements ProxyHandler {
 
                     clientResponse.end();
                     log.debug("gRPC response completed from {}:{}", host, port);
+
+                    // Log access
+                    if (accessLogger != null && accessLogger.isEnabled()) {
+                        long duration = System.currentTimeMillis() - startTime;
+                        AccessLogContext context = AccessLogContext.builder()
+                                .method(clientRequest.method().name())
+                                .uri(clientRequest.path())
+                                .queryString(clientRequest.query())
+                                .protocol(clientRequest.version().toString())
+                                .status(proxyResponse.statusCode())
+                                .bytesSent(bytesSent[0])
+                                .durationMs(duration)
+                                .clientIp(clientIp)
+                                .backend(backend != null ? backend.getName() : "")
+                                .endpoint(endpoint != null ? endpoint.getAddress() : host + ":" + port)
+                                .requestHeaders(requestHeaders)
+                                .responseHeaders(responseHeaders)
+                                .build();
+                        accessLogger.logAccess(context);
+                    }
                 } else {
                     log.debug("gRPC response already ended for {}:{}", host, port);
                 }

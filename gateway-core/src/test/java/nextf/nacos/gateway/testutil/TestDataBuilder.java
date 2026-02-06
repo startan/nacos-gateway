@@ -22,7 +22,7 @@ public class TestDataBuilder {
         private List<RouteConfig> routes = new ArrayList<>();
         private List<BackendConfig> backends = new ArrayList<>();
         private TimeoutConfig timeoutConfig;
-        private LoggingConfig loggingConfig;
+        private AccessLogConfig accessLogConfig;
         private ManagementConfig managementConfig;
 
         public GatewayConfigBuilder() {
@@ -135,11 +135,11 @@ public class TestDataBuilder {
             return this;
         }
 
-        public GatewayConfigBuilder withLogging(String level, boolean verbose) {
-            LoggingConfig logging = new LoggingConfig();
-            logging.setLevel(level);
-            logging.setVerbose(verbose);
-            this.loggingConfig = logging;
+        public GatewayConfigBuilder withAccessLog(boolean enabled, String format) {
+            AccessLogConfig accessLog = new AccessLogConfig();
+            accessLog.setEnabled(enabled);
+            accessLog.setFormat(format);
+            this.accessLogConfig = accessLog;
             return this;
         }
 
@@ -159,7 +159,7 @@ public class TestDataBuilder {
             config.setRoutes(routes);
             config.setBackends(backends);
             config.setTimeout(timeoutConfig);
-            config.setLogging(loggingConfig);
+            config.setAccessLog(accessLogConfig);
             config.setManagement(managementConfig);
             return config;
         }
