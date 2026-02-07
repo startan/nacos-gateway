@@ -152,6 +152,66 @@ backends:
 
 详见 CLAUDE.md 文档。
 
+### 访问日志
+
+访问日志功能记录所有 HTTP 请求的详细信息，支持 pattern 和 JSON 两种格式。
+
+#### 配置示例
+
+```yaml
+accessLog:
+  enabled: true                   # 启用访问日志
+  format: pattern                 # 格式: pattern 或 json
+  pattern: "%h - - [%t] \"%m %U %H\" %s %b %D"  # 自定义格式（仅 format=pattern 时有效）
+  output:
+    path: logs/access.log         # 日志文件路径
+  rotation:
+    policy: daily                 # 轮转策略: daily, size, both
+    maxHistory: 30                # 保留历史文件数量
+  async:
+    enabled: true                 # 异步写入
+```
+
+#### Pattern 占位符
+
+当 `format: pattern` 时，支持以下占位符：
+
+| 占位符 | 说明 |
+|--------|------|
+| `%h` | 客户端 IP |
+| `%m` | HTTP 方法 |
+| `%U` | URI 路径 |
+| `%s` | HTTP 状态码 |
+| `%b` | 发送字节数 |
+| `%D` | 请求耗时（毫秒） |
+| `%t` | 时间戳 |
+| `%H` | HTTP 协议 |
+| `%r` | 请求行 |
+| `%{name}i` | 请求头（如 `%{User-Agent}i`） |
+
+#### 日志格式
+
+**Pattern 格式**（默认，Apache 风格）：
+```
+192.168.1.1 - - [07/Feb/2026:14:30:00 +0800] "GET /api/v1/config HTTP/1.1" 200 512 15
+```
+
+**JSON 格式**（结构化，便于解析）：
+```json
+{
+  "timestamp": "2024-01-01T12:00:00Z",
+  "clientIp": "192.168.1.1",
+  "method": "GET",
+  "uri": "/nacos/v1/ns/instance/list",
+  "protocol": "HTTP/1.1",
+  "status": 200,
+  "bytesSent": 512,
+  "durationMs": 15
+}
+```
+
+更多详细配置请参考 [CLAUDE.md](CLAUDE.md)。
+
 ## 健康检查
 
 ```bash

@@ -50,11 +50,18 @@ backends:
 #  requestTimeoutSeconds: 30
 #  idleTimeoutSeconds: 60
 
-# Logging configuration
-logging:
-  level: INFO                     # Log level: TRACE, DEBUG, INFO, WARN, ERROR
-  verbose: false                  # Enable verbose logging
-  format: json                    # Log format: text or json
+# Access log configuration
+accessLog:
+  enabled: true                  # Set to true to enable access logging
+  format: pattern                 # Log format: pattern or json
+  pattern: "%h - - [%t] \"%m %U %H\" %s %b %D \"%{User-Agent}i\" \"%{Referer}i\"%n"
+  output:
+    path: logs/access.log
+  rotation:
+    policy: daily
+    maxHistory: 30
+  async:
+    enabled: true
 
 # Management endpoint configuration
 management:

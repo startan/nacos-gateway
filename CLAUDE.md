@@ -96,10 +96,6 @@ server:
     maxConnections: 10000            # 最大连接数 (网关服务整体限制)
     maxQpsPerClient: 10              # 最大请求QPS (针对单个客户端，可被后端服务组配置覆盖)
     maxConnectionsPerClient: 5       # 最大连接数 (针对单个客户端，可被后端服务组配置覆盖)
-  # 日志配置
-  logging:
-    level: INFO                      # 日志级别: TRACE, DEBUG, INFO, WARN, ERROR
-    verbose: false                   # 是否记录详细的请求/响应信息
 
 # 路由规则（仅在 router 模式下使用）
 routes:
@@ -136,7 +132,92 @@ backends:
         priority: 20
       - host: 10.12.23.4
         priority: 20
+
+# 访问日志配置（可选）
+accessLog:
+  enabled: false                    # 是否启用访问日志，默认 false
+  format: pattern                   # 日志格式: pattern 或 json，默认 pattern
+  pattern: "%h - - [%t] \"%m %U %H\" %s %b %D \"%{User-Agent}i\" \"%{Referer}i\"%n"
+                                    # 日志格式模式（仅 format=pattern 时有效）
+  output:
+    path: logs/access.log           # 日志文件路径
+    encoding: UTF-8                 # 文件编码
+  rotation:
+    policy: daily                   # 轮转策略: daily, size, both
+    maxFileSize: 100MB              # 最大文件大小（policy=size 或 both 时有效）
+    maxHistory: 30                  # 保留历史文件数量
+    fileNamePattern: "access.%d{yyyy-MM-dd}.log"  # 轮转文件名模式
+  async:
+    enabled: true                   # 是否启用异步写入
+    queueSize: 512                  # 异步队列大小
+    discardingThreshold: 20         # 丢弃阈值
+    neverBlock: true                # 是否永不阻塞
 ```
+
+### 访问日志 Pattern 占位符
+
+当 `accessLog.format` 设置为 `pattern` 时，可以使用以下占位符：
+
+#### 简单占位符
+| 占位符 | 说明 | 示例 |
+|--------|------|------|
+| `%h` | 客户端 IP 地址 | 192.168.1.1 |
+| `%m` | HTTP 方法 | GET, POST, etc. |
+| `%U` | URI 路径 | /nacos/v1/ns/instance/list |
+| `%s` | HTTP 响应状态码 | 200, 404, etc. |
+| `%b` | 发送的字节数（无内容时显示 `-`） | 512, - |
+| `%D` | 请求耗时（毫秒） | 15 |
+| `%t` | 时间戳 | 07/Feb/2026:14:30:00 +0800 |
+| `%H` | HTTP 协议 | HTTP/1.1, HTTP/2 |
+| `%r` | 请求行（METHOD URI PROTOCOL） | GET /api/v1/config HTTP/1.1 |
+| `%u` | 远程用户（未支持，固定显示 `-`） | - |
+| `%T` | 请求耗时（秒） | 0.015 |
+| `%n` | 换行符 | - |
+
+#### 命名占位符（%{name}type）
+| 占位符 | 说明 | 示例 |
+|--------|------|------|
+| `%{User-Agent}i` | 请求头中的 User-Agent | Mozilla/5.0... |
+| `%{Referer}i` | 请求头中的 Referer | http://example.com |
+| `%{Content-Type}i` | 任意请求头 | application/json |
+| `%{any-header}o` | 任意响应头 | - |
+
+#### 默认 Pattern 示例
+默认的 pattern 格式（Apache 风格）：
+```
+%h - - [%t] "%m %U %H" %s %b %D "%{User-Agent}i" "%{Referer}i"%n
+```
+
+输出示例：
+```
+192.168.1.1 - - [07/Feb/2026:14:30:00 +0800] "GET /nacos/v1/ns/instance/list HTTP/1.1" 200 512 15 "Mozilla/5.0" "http://example.com"
+```
+
+### 访问日志格式类型
+
+#### Pattern 格式
+- 适合人类阅读的文本格式
+- 支持上述所有占位符
+- 每条日志一行
+
+#### JSON 格式
+- 结构化的 JSON 格式
+- 适合日志分析和解析工具
+- 每条日志一个 JSON 对象，包含以下字段：
+  ```json
+  {
+    "timestamp": "2024-01-01T12:00:00Z",
+    "clientIp": "192.168.1.1",
+    "method": "GET",
+    "uri": "/nacos/v1/ns/instance/list",
+    "protocol": "HTTP/1.1",
+    "status": 200,
+    "bytesSent": 512,
+    "durationMs": 15,
+    "backend": "local-nacos",
+    "endpoint": "localhost:8848"
+  }
+  ```
 
 ## 系统要求
 
