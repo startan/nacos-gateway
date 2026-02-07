@@ -38,29 +38,10 @@ public class Main {
         // Default config filenames
         String[] defaultConfigs = {"nacos-gateway.yaml", "nacos-gateway.yml"};
 
-        // Check if config exists in classpath
-        for (String configName : defaultConfigs) {
-            String classpathConfig = Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResource(configName) != null ? configName : null;
-
-            if (classpathConfig != null) {
-                return classpathConfig;
-            }
-        }
-
         // Check if config exists in current directory
         for (String configName : defaultConfigs) {
             if (java.nio.file.Files.exists(java.nio.file.Paths.get(configName))) {
                 return configName;
-            }
-        }
-
-        // Check in src/main/resources (for development)
-        for (String configName : defaultConfigs) {
-            String devPath = "src/main/resources/" + configName;
-            if (java.nio.file.Files.exists(java.nio.file.Paths.get(devPath))) {
-                return devPath;
             }
         }
 

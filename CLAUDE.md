@@ -17,8 +17,8 @@
 ## 配置读取模式
 - **多协议支持**:
   - `file://` - 本地文件系统读取（默认，支持热更新）
-  - `classpath://` - 类路径读取（不支持热更新）
-  - `nacos://` - Nacos 配置中心读取（支持实时推送更新）
+  - `classpath://` - 类路径读取（不支持热更新，需通过 -c 参数明确指定）
+  - `nacos://` - Nacos 配置中心读取（支持实时推送更新，需通过 -c 参数明确指定）
 - **向后兼容**: 未指定协议时默认使用 file://
 - **灵活配置**: 通过 URL 参数配置 Nacos 认证信息
 
@@ -37,7 +37,9 @@
 
 
 ## 配置
-配置文件路径默认为classpath下的 `nacos-gateway.yaml`或`nacos-gateway.yml`，您可以在启动时通过命令行参数`-c path/to/config.yaml`指定自定义配置文件位置。
+配置文件默认从当前目录查找 `nacos-gateway.yaml` 或 `nacos-gateway.yml`。
+您可以在启动时通过命令行参数 `-c path/to/config.yaml` 指定自定义配置文件位置，
+支持 `file://`、`classpath://`、`nacos://` 三种协议前缀。
 
 ### 配置文件路径协议
 

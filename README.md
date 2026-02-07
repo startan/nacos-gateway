@@ -36,13 +36,13 @@ mvn clean install
 ### 运行
 
 ```bash
-# 使用默认配置（file:// 协议）
+# 使用默认配置（从当前目录查找 nacos-gateway.yaml 或 nacos-gateway.yml）
 java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar
 
 # 使用自定义配置文件（file:// 协议）
 java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar /path/to/config.yaml
 
-# 使用类路径配置（classpath:// 协议）
+# 使用类路径配置（classpath:// 协议，需明确指定）
 java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar classpath://config.yaml
 
 # 使用 Nacos 配置中心（nacos:// 协议）
@@ -147,7 +147,7 @@ backends:
 支持三种配置读取协议：
 
 - **file://** - 本地文件（默认，支持热更新）
-- **classpath://** - 类路径资源
+- **classpath://** - 类路径资源（需通过 -c 参数明确指定）
 - **nacos://** - Nacos 配置中心（支持实时推送）
 
 详见 CLAUDE.md 文档。
