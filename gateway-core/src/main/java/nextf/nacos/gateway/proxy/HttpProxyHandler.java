@@ -133,6 +133,10 @@ public class HttpProxyHandler implements ProxyHandler {
             }
         });
 
+        // Enable chunked transfer encoding to correctly handle response body
+        // This ensures proper response transmission when backend uses chunked encoding
+        clientResponse.setChunked(true);
+
         // Collect response headers for access log
         Map<String, String> responseHeaders = new HashMap<>();
         if (accessLogger != null && accessLogger.isEnabled()) {
