@@ -8,7 +8,7 @@
     <parent>
         <groupId>nextf.nacos.gateway</groupId>
         <artifactId>nacos-gateway</artifactId>
-        <version>1.0.0</version>
+        <version>0.1.0</version>
     </parent>
 
     <artifactId>gateway-launcher</artifactId>

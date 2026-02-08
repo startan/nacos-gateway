@@ -1371,13 +1371,13 @@ Nacos Gateway 支持三种配置文件读取协议，通过配置路径的协议
 **使用示例**：
 ```bash
 # 默认方式（自动识别为 file://）
-java -jar gateway-launcher-1.0.0.jar nacos-gateway.yaml
+java -jar gateway-launcher-0.1.0.jar nacos-gateway.yaml
 
 # 显式指定 file:// 协议
-java -jar gateway-launcher-1.0.0.jar file:///etc/nacos-gateway/config.yaml
+java -jar gateway-launcher-0.1.0.jar file:///etc/nacos-gateway/config.yaml
 
 # Windows 路径
-java -jar gateway-launcher-1.0.0.jar file://D:/config/nacos-gateway.yaml
+java -jar gateway-launcher-0.1.0.jar file://D:/config/nacos-gateway.yaml
 ```
 
 #### 6.0.2 classpath:// 协议
@@ -1391,7 +1391,7 @@ java -jar gateway-launcher-1.0.0.jar file://D:/config/nacos-gateway.yaml
 
 **使用示例**：
 ```bash
-java -jar gateway-launcher-1.0.0.jar classpath://nacos-gateway.yaml
+java -jar gateway-launcher-0.1.0.jar classpath://nacos-gateway.yaml
 ```
 
 #### 6.0.3 nacos:// 协议
@@ -1426,19 +1426,19 @@ nacos://<dataId>[:<group>]?<query-parameters>
 
 ```bash
 # 基础配置（使用默认 group 和 namespace）
-java -jar gateway-launcher-1.0.0.jar \
+java -jar gateway-launcher-0.1.0.jar \
   "nacos://config.yaml?serverAddr=127.0.0.1:8848"
 
 # AK/SK 认证模式
-java -jar gateway-launcher-1.0.0.jar \
+java -jar gateway-launcher-0.1.0.jar \
   "nacos://nacos-gateway.yaml:gateway-group?namespace=dev&serverAddr=127.0.0.1:8848&accessKey=yourAccessKey&secretKey=yourSecretKey"
 
 # 用户名/密码认证模式
-java -jar gateway-launcher-1.0.0.jar \
+java -jar gateway-launcher-0.1.0.jar \
   "nacos://nacos-gateway.yaml:prod?namespace=prod&serverAddr=192.168.1.100:8848,192.168.1.101:8848&username=nacos&password=nacos"
 
 # 指定分组但使用默认 namespace
-java -jar gateway-launcher-1.0.0.jar \
+java -jar gateway-launcher-0.1.0.jar \
   "nacos://config.yaml:my-group?serverAddr=127.0.0.1:8848"
 ```
 
@@ -1897,7 +1897,7 @@ mvn exec:java -Dexec.args="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n
 java -Xms2g -Xmx2g \
      -XX:+UseG1GC \
      -XX:MaxGCPauseMillis=200 \
-     -jar gateway-launcher-1.0.0.jar
+     -jar gateway-launcher-0.1.0.jar
 ```
 
 #### 7.5.2 Vert.x 优化
@@ -1944,7 +1944,7 @@ VertxOptions options = new VertxOptions()
 mvn package -DskipTests
 
 # 生成的文件
-gateway-launcher/target/gateway-launcher-1.0.0.jar
+gateway-launcher/target/gateway-launcher-0.1.0.jar
 ```
 
 ### 8.2 部署方式
@@ -1952,19 +1952,19 @@ gateway-launcher/target/gateway-launcher-1.0.0.jar
 #### 8.2.1 直接运行
 
 ```bash
-java -jar gateway-launcher-1.0.0.jar
+java -jar gateway-launcher-0.1.0.jar
 ```
 
 #### 8.2.2 使用自定义配置
 
 ```bash
-java -jar gateway-launcher-1.0.0.jar /path/to/config.yaml
+java -jar gateway-launcher-0.1.0.jar /path/to/config.yaml
 ```
 
 #### 8.2.3 后台运行
 
 ```bash
-nohup java -jar gateway-launcher-1.0.0.jar > gateway.log 2>&1 &
+nohup java -jar gateway-launcher-0.1.0.jar > gateway.log 2>&1 &
 ```
 
 #### 8.2.4 Systemd 服务
@@ -1980,7 +1980,7 @@ After=network.target
 Type=simple
 User=gateway
 WorkingDirectory=/opt/nacos-gateway
-ExecStart=/usr/bin/java -jar /opt/nacos-gateway/gateway-launcher-1.0.0.jar
+ExecStart=/usr/bin/java -jar /opt/nacos-gateway/gateway-launcher-0.1.0.jar
 Restart=on-failure
 RestartSec=10
 
@@ -2003,7 +2003,7 @@ FROM eclipse-temurin:17-jre
 
 WORKDIR /app
 
-COPY gateway-launcher/target/gateway-launcher-1.0.0.jar app.jar
+COPY gateway-launcher/target/gateway-launcher-0.1.0.jar app.jar
 
 COPY gateway-launcher/src/main/resources/config.yaml config.yaml
 
@@ -2015,7 +2015,7 @@ CMD ["config.yaml"]
 
 构建镜像：
 ```bash
-docker build -t nacos-gateway:1.0.0 .
+docker build -t nacos-gateway:0.1.0 .
 ```
 
 运行容器：
@@ -2024,7 +2024,7 @@ docker run -d \
   --name nacos-gateway \
   -p 9848:9848 \
   -v /path/to/config.yaml:/app/config.yaml \
-  nacos-gateway:1.0.0
+  nacos-gateway:0.1.0
 ```
 
 ### 8.3 健康检查
@@ -2073,7 +2073,7 @@ java -Dcom.sun.management.jmxremote \
      -Dcom.sun.management.jmxremote.port=9010 \
      -Dcom.sun.management.jmxremote.authenticate=false \
      -Dcom.sun.management.jmxremote.ssl=false \
-     -jar gateway-launcher-1.0.0.jar
+     -jar gateway-launcher-0.1.0.jar
 ```
 
 ### 8.6 性能调优
@@ -2087,7 +2087,7 @@ java -server \
      -XX:MaxGCPauseMillis=200 \
      -XX:+HeapDumpOnOutOfMemoryError \
      -XX:HeapDumpPath=/var/log/gateway/ \
-     -jar gateway-launcher-1.0.0.jar
+     -jar gateway-launcher-0.1.0.jar
 ```
 
 #### 8.6.2 系统参数调优
@@ -2345,6 +2345,6 @@ management:
 
 ---
 
-**文档版本**: 1.0.0
+**文档版本**: 0.1.0
 **最后更新**: 2025-01-08
 **维护者**: Nacos Gateway Team

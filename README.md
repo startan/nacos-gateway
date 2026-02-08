@@ -37,26 +37,26 @@ mvn clean install
 
 ```bash
 # 使用默认配置（从当前目录查找 nacos-gateway.yaml 或 nacos-gateway.yml）
-java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar
+java -jar gateway-launcher/target/gateway-launcher-0.1.0.jar
 
 # 使用自定义配置文件（file:// 协议）
-java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar /path/to/config.yaml
+java -jar gateway-launcher/target/gateway-launcher-0.1.0.jar /path/to/config.yaml
 
 # 使用类路径配置（classpath:// 协议，需明确指定）
-java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar classpath://config.yaml
+java -jar gateway-launcher/target/gateway-launcher-0.1.0.jar classpath://config.yaml
 
 # 使用 Nacos 配置中心（nacos:// 协议）
 # 基础配置
-java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml?serverAddr=127.0.0.1:8848"
+java -jar gateway-launcher/target/gateway-launcher-0.1.0.jar "nacos://config.yaml?serverAddr=127.0.0.1:8848"
 
 # 使用自定义分组
-java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml:my-group?serverAddr=127.0.0.1:8848"
+java -jar gateway-launcher/target/gateway-launcher-0.1.0.jar "nacos://config.yaml:my-group?serverAddr=127.0.0.1:8848"
 
 # AK/SK 认证
-java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml:my-group?namespace=dev&serverAddr=127.0.0.1:8848&accessKey=yourKey&secretKey=yourSecret"
+java -jar gateway-launcher/target/gateway-launcher-0.1.0.jar "nacos://config.yaml:my-group?namespace=dev&serverAddr=127.0.0.1:8848&accessKey=yourKey&secretKey=yourSecret"
 
 # 用户名/密码认证
-java -jar gateway-launcher/target/gateway-launcher-1.0.0.jar "nacos://config.yaml:prod?namespace=prod&serverAddr=127.0.0.1:8848&username=nacos&password=nacos"
+java -jar gateway-launcher/target/gateway-launcher-0.1.0.jar "nacos://config.yaml:prod?namespace=prod&serverAddr=127.0.0.1:8848&username=nacos&password=nacos"
 ```
 
 ### 配置示例
