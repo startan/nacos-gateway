@@ -85,6 +85,48 @@
      java -jar nacos-gateway.jar -c "nacos://nacos-gateway.yaml:prod?namespace=prod&serverAddr=192.168.1.100:8848,192.168.1.101:8848&username=nacos&password=nacos"
      ```
 
+### 配置模板变量替换
+
+支持在配置文件中使用变量占位符，运行时自动从环境变量或系统属性中获取值进行替换。
+
+**变量语法**：
+
+| 语法格式 | 说明 | 示例 |
+|---------|------|------|
+| `${env:VAR_NAME}` | 从环境变量读取 | `${env:HOME}` |
+| `${env:VAR_NAME:-default}` | 从环境变量读取，未找到则使用默认值 | `${env:PORT:-8080}` |
+| `${sys:property.name}` | 从系统属性读取 | `${sys:user.home}` |
+| `${sys:property.name:-default}` | 从系统属性读取，未找到则使用默认值 | `${sys:log.path:-/var/log}` |
+| `${VAR_NAME}` | 先尝试环境变量，再尝试系统属性 | `${PORT}` |
+| `${VAR_NAME:-default}` | 先尝试环境变量，再尝试系统属性，都未找到则使用默认值 | `${PORT:-8080}` |
+
+**使用示例**：
+
+```yaml
+# 使用环境变量配置端口
+server:
+  ports:
+    apiV1: ${env:API_V1_PORT:-18848}
+    apiV2: ${env:API_V2_PORT:-19848}
+    apiConsole: ${env:CONSOLE_PORT:-18080}
+
+# 使用系统属性配置日志路径
+accessLog:
+  output:
+    path: ${sys:log.path:-./logs}/access.log
+
+# 路径拼接示例
+backends:
+  - name: my-service
+    endpoints:
+      - host: ${env:BACKEND_HOST:-localhost}
+```
+
+**特性**：
+- 支持嵌套变量引用（变量值中可包含其他变量）
+- 未找到的变量会保留原样并记录警告日志
+- 完全向后兼容，不包含变量的配置不受影响
+
 ### 配置文件结构
 ```yaml
 # 网关服务配置：同时监听多个端口，支持路由转发到不同的后端服务组

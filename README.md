@@ -152,6 +152,46 @@ backends:
 
 详见 CLAUDE.md 文档。
 
+### 配置变量替换
+
+支持在配置文件中使用变量占位符，从环境变量或系统属性动态获取值。
+
+**快速示例**：
+
+```bash
+# 设置环境变量
+export API_PORT=18848
+export LOG_DIR=/var/log/gateway
+
+# 启动网关，配置文件会自动替换变量
+java -jar gateway-launcher/target/gateway-launcher-0.1.0.jar -c nacos-gateway.yaml
+```
+
+**配置文件示例**：
+
+```yaml
+server:
+  ports:
+    apiV1: ${env:API_PORT:-18848}
+
+accessLog:
+  output:
+    path: ${env:LOG_DIR:-./logs}/access.log
+```
+
+**支持的变量语法**：
+
+| 语法格式 | 说明 | 示例 |
+|---------|------|------|
+| `${env:VAR_NAME}` | 从环境变量读取 | `${env:HOME}` |
+| `${env:VAR_NAME:-default}` | 从环境变量读取，未找到则使用默认值 | `${env:PORT:-8080}` |
+| `${sys:property.name}` | 从系统属性读取 | `${sys:user.home}` |
+| `${sys:property.name:-default}` | 从系统属性读取，未找到则使用默认值 | `${sys:log.path:-/var/log}` |
+| `${VAR_NAME}` | 先尝试环境变量，再尝试系统属性 | `${PORT}` |
+| `${VAR_NAME:-default}` | 先尝试环境变量，再尝试系统属性，都未找到则使用默认值 | `${PORT:-8080}` |
+
+详细的变量语法请参考 [CLAUDE.md](CLAUDE.md#配置模板变量替换)。
+
 ### 访问日志
 
 访问日志功能记录所有 HTTP 请求的详细信息，支持 pattern 和 JSON 两种格式。

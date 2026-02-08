@@ -42,7 +42,10 @@ public class ConfigLoader {
             throw new IOException("Configuration content is null or empty");
         }
 
-        GatewayConfig config = yamlMapper.readValue(configContent, GatewayConfig.class);
+        // Resolve configuration template variables
+        String resolvedContent = ConfigVariableResolver.resolve(configContent);
+
+        GatewayConfig config = yamlMapper.readValue(resolvedContent, GatewayConfig.class);
         validate(config);
 
         log.info("Configuration loaded and validated successfully");
