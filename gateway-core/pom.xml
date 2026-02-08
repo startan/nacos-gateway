@@ -18,13 +18,6 @@
     <description>Core implementation module for Nacos Gateway</description>
 
     <dependencies>
-        <!-- Gateway API -->
-        <dependency>
-            <groupId>nextf.nacos.gateway</groupId>
-            <artifactId>gateway-api</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
         <!-- Vert.x Core -->
         <dependency>
             <groupId>io.vertx</groupId>

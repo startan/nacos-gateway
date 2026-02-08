@@ -22,7 +22,6 @@
     </licenses>
 
     <modules>
-        <module>gateway-api</module>
         <module>gateway-core</module>
         <module>gateway-launcher</module>
     </modules>
