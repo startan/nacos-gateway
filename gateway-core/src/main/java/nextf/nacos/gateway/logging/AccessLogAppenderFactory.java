@@ -26,8 +26,9 @@ public class AccessLogAppenderFactory {
         appender.setContext(loggerContext);
         appender.setName("AccessLogAppender");
 
-        // Configure file path and encoder
-        appender.setFile(config.getOutput().getPath());
+        // Extract output path to variable
+        String outputLogPath = config.getOutput().getPath();
+        appender.setFile(outputLogPath);
 
         // Create encoder with our custom layout
         AccessLogLayout layout = new AccessLogLayout(config);
@@ -36,8 +37,8 @@ public class AccessLogAppenderFactory {
         encoder.start();  // Critical fix: start the encoder
         appender.setEncoder(encoder);
 
-        // Configure rolling policy
-        configureRollingPolicy(appender, config.getRotation(), loggerContext);
+        // Configure rolling policy with outputLogPath
+        configureRollingPolicy(appender, config.getRotation(), outputLogPath, loggerContext);
 
         // Start appender
         appender.start();
@@ -52,6 +53,7 @@ public class AccessLogAppenderFactory {
 
     private static void configureRollingPolicy(RollingFileAppender<ILoggingEvent> appender,
                                                AccessLogRotationConfig rotationConfig,
+                                               String outputLogPath,
                                                LoggerContext loggerContext) {
         String policy = rotationConfig.getPolicy();
 
@@ -59,7 +61,7 @@ public class AccessLogAppenderFactory {
             // Size and time based rolling
             SizeAndTimeBasedRollingPolicy<ILoggingEvent> rollingPolicy = new SizeAndTimeBasedRollingPolicy<>();
             rollingPolicy.setContext(loggerContext);
-            rollingPolicy.setFileNamePattern(buildFileNamePattern(rotationConfig));
+            rollingPolicy.setFileNamePattern(buildFileNamePattern(rotationConfig, outputLogPath));
             rollingPolicy.setMaxFileSize(FileSize.valueOf(rotationConfig.getMaxFileSize()));
             rollingPolicy.setMaxHistory(rotationConfig.getMaxHistory());
             rollingPolicy.setParent(appender);
@@ -69,7 +71,7 @@ public class AccessLogAppenderFactory {
             // Time based rolling (default)
             TimeBasedRollingPolicy<ILoggingEvent> rollingPolicy = new TimeBasedRollingPolicy<>();
             rollingPolicy.setContext(loggerContext);
-            rollingPolicy.setFileNamePattern(buildFileNamePattern(rotationConfig));
+            rollingPolicy.setFileNamePattern(buildFileNamePattern(rotationConfig, outputLogPath));
             rollingPolicy.setMaxHistory(rotationConfig.getMaxHistory());
             rollingPolicy.setParent(appender);
             rollingPolicy.start();
@@ -77,14 +79,27 @@ public class AccessLogAppenderFactory {
         }
     }
 
-    private static String buildFileNamePattern(AccessLogRotationConfig rotationConfig) {
-        String path = rotationConfig.getFileNamePattern();
-        // If pattern doesn't contain directory prefix, add it from output path
-        if (!path.contains("/") && !path.contains("\\")) {
-            String outputPath = rotationConfig.getFileNamePattern();
-            return outputPath;
+    private static String buildFileNamePattern(AccessLogRotationConfig rotationConfig,
+                                              String outputLogPath) {
+        String pattern = rotationConfig.getFileNamePattern();
+
+        // If pattern contains path separators, user specified full path, use it directly (backward compatible)
+        if (pattern.contains("/") || pattern.contains("\\")) {
+            return pattern;
         }
-        return path;
+
+        // Otherwise, extract directory from outputLogPath and prepend to pattern (default behavior)
+        int lastSlashPos = Math.max(
+            outputLogPath.lastIndexOf('/'),
+            outputLogPath.lastIndexOf('\\')
+        );
+
+        if (lastSlashPos > 0) {
+            String dir = outputLogPath.substring(0, lastSlashPos + 1);
+            return dir + pattern;
+        }
+
+        return pattern;
     }
 
     private static Appender<ILoggingEvent> wrapWithAsync(
